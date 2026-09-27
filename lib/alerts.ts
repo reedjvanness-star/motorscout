@@ -3,6 +3,7 @@ import {inventoryKeys} from './connections';
 import {searchListings} from './sources';
 import {listingKey,type Filters,type Listing} from './domain';
 import {alertSearchKey,newAlertMatches,alertEmailText} from './alert-matches';
+import {approvedAlertKeys} from './alert-access';
 const DAY=86400000;
 export function emailReady(){
  const settings=config();
@@ -14,7 +15,8 @@ export async function alertSnapshot(userId:string){
   db().prepare('SELECT a.id,a.filters,a.enabled,a.last_run,a.next_run,a.results,s.email_enabled,s.last_error FROM alerts a LEFT JOIN alert_settings s ON s.alert_id=a.id WHERE a.user_id=? ORDER BY a.next_run').bind(userId).all(),
   db().prepare('SELECT id,alert_id,cars,created_at,read_at FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all(),
  ]);
- return {alerts:rows.results,notifications:notices.results,emailReady:emailReady(),schedulerReady:await schedulerReady()};
+ const keys=approvedAlertKeys(config(),await inventoryKeys(userId));
+ return {alerts:rows.results,notifications:notices.results,emailReady:emailReady(),schedulerReady:!!(keys.marketcheck||keys.autodev)&&await schedulerReady()};
 }
 export async function saveAlert(userId:string,filters:Filters,baseline:Listing[],enabled:boolean,email:string|null,emailEnabled:boolean){
  if(emailEnabled&&(!emailReady()||!email))throw Error('Email alerts are not connected yet. You can save this search for in-app updates.');
@@ -39,9 +41,9 @@ export async function checkAlert(id:string,userId?:string){
  const claimed=await db().prepare('UPDATE alert_settings SET lease=?,lease_until=? WHERE alert_id=? AND lease_until<=? AND EXISTS(SELECT 1 FROM alerts WHERE id=? AND next_run<=? AND (?=1 OR enabled=1)) RETURNING alert_id').bind(lease,now+5*60000,id,now,id,now,userId?1:0).first();
  if(!claimed)return {checked:false};
  try{
+  const filters=filterSchema.parse(JSON.parse(row.filters)),keys=approvedAlertKeys(config(),await inventoryKeys(row.user_id));
+  if(!keys.marketcheck&&!keys.autodev)throw Error('Saved-search checks are awaiting an approved inventory feed. Your filters are saved; no personal connection is needed.');
   await limitUsage('__daily_alert_checks__',10);
-  const filters=filterSchema.parse(JSON.parse(row.filters)),keys=await inventoryKeys(row.user_id);
-  if(!keys.marketcheck&&!keys.autodev)throw Error('Inventory is not connected for this account.');
   const result=await searchListings({...filters,limit:50},keys);
   if(!result.sources.some(s=>s.status==='searched'&&s.inspected!==undefined))throw Error('Inventory could not be checked. We will retry later.');
   const prior=await db().prepare('SELECT listing_key FROM alert_seen WHERE alert_id=?').bind(id).all<{listing_key:string}>();

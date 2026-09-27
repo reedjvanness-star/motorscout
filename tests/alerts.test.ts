@@ -9,6 +9,9 @@ const require=createRequire(import.meta.url);
 const {build}=createRequire(require.resolve('wrangler/package.json'))('esbuild');
 import {filterSchema,listingKey,type Listing} from '../lib/domain';
 import {newAlertMatches,alertSearchKey} from '../lib/alert-matches';
+import {approvedAlertKeys} from '../lib/alert-access';
+assert.deepEqual(approvedAlertKeys({}, {marketcheck:'mc',autodev:'ad'}),{marketcheck:undefined,autodev:undefined});
+assert.deepEqual(approvedAlertKeys({AUTODEV_ALERTS_APPROVED:'true'}, {marketcheck:'mc',autodev:'ad'}),{marketcheck:undefined,autodev:'ad'});
 
 const car:Listing={id:'one',vin:'12345678901234567',title:'Fixture green BMW M4',make:'BMW',model:'M4',trim:'Competition',exteriorColor:'Green',year:2021,price:45000,miles:30000,state:'CO',city:'Test',source:'test',url:'https://example.test/one',photo:null,seller:'dealer',drive:'RWD',titleStatus:'clean',condition:'used',history:'unknown',fees:0,checkedAt:new Date().toISOString(),sourceUpdatedAt:null,concerns:[],comparables:[],median:null,reason:'',total:45000};
 const filters=filterSchema.parse({make:'BMW',model:'M4',trim:'Competition',exteriorColor:'green',maxPrice:50000,maxMiles:40000,state:'CO'});
@@ -32,7 +35,7 @@ const database={prepare:(sql:string)=>new Statement(sql),batch:async(statements:
  sqlite.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());sqlite.exec('COMMIT');return out}catch(e){sqlite.exec('ROLLBACK');throw e}
 }};
 let calls=0,inventory=[car],failure=false;
-const fixture={env:{DB:database},search:async()=>{calls++;if(failure)return {listings:[],sources:[{status:'error'}]};return {listings:inventory,sources:[{status:'searched',inspected:inventory.length}],checkedAt:new Date().toISOString()}}};
+const fixture={env:{DB:database,AUTODEV_ALERTS_APPROVED:'true'},search:async()=>{calls++;if(failure)return {listings:[],sources:[{status:'error'}]};return {listings:inventory,sources:[{status:'searched',inspected:inventory.length}],checkedAt:new Date().toISOString()}}};
 (globalThis as any).__alertFixture=fixture;
 const dir=await mkdtemp(join(tmpdir(),'motorscout-alert-test-'));
 try{
@@ -75,5 +78,11 @@ try{
  fixture.search=async()=>{sqlite.prepare('UPDATE alerts SET enabled=0 WHERE id=?').run(pauseId);return {listings:[car],sources:[{status:'searched',inspected:1}],checkedAt:new Date().toISOString()}};
  assert.equal((await api.checkAlert(pauseId)).checked,false,'pause while inventory loads cancels the commit');
  assert.equal((await api.alertSnapshot('pause-during-fetch')).notifications.length,0);
+ fixture.env.AUTODEV_ALERTS_APPROVED='false';
+ const blockedId=await api.saveAlert('unapproved-feed',filters,[],true,null,false);
+ const callsBefore=calls;
+ assert.match((await api.checkAlert(blockedId)).error,/approved inventory feed/);
+ assert.equal(calls,callsBefore,'unapproved feeds never receive an alert request');
+ assert.equal((await api.alertSnapshot('unapproved-feed')).schedulerReady,false);
  console.log('PASS: exact-match alerts, baseline, deduplication, concurrency, daily gating, account isolation, pause and provider recovery');
 }finally{sqlite.close();delete (globalThis as any).__alertFixture;await rm(dir,{recursive:true,force:true})}
