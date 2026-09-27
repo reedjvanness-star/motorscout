@@ -1,9 +1,9 @@
 import {Info} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import type {Source} from '@/lib/domain';
-export function SearchCoverage({sources,onDetails}:{sources:Source[];onDetails:()=>void}){
+export function SearchCoverage({sources,notice='',count=0,onDetails}:{sources:Source[];notice?:string;count?:number;onDetails:()=>void}){
  const errors=sources.filter(source=>source.status==='error');
- if(!errors.length)return null;
- const limited=errors.some(source=>/quota|rate.*limit|allowance|429/i.test(source.detail));
- return <div className="search-coverage" role="status"><Info size={18}/><div><strong>{limited?'Some sources have reached a search limit':'Some sources couldn’t be checked'}</strong><p>Your matches are still here, but this search may be incomplete. Your requirements haven’t changed.</p></div><Button variant="ghost" size="sm" onClick={onDetails}>See source status</Button></div>;
+ if(!errors.length&&!notice)return null;
+ const limited=/quota|rate.*limit|allowance|credit|429/i.test([notice,...errors.map(source=>source.detail)].join(' '));
+ return <div className="search-coverage" role="status"><Info size={18}/><div><strong>{limited?'Live inventory is temporarily limited':'Some marketplaces couldn’t be checked'}</strong><p>{count?'Keep exploring your collected cars. This search may be incomplete.':'An incomplete search does not mean there are no cars matching your requirements.'} Your filters stay unchanged.</p>{notice&&<p>{notice}</p>}</div><Button variant="ghost" size="sm" onClick={onDetails}>See source status</Button></div>;
 }
