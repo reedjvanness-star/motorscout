@@ -27,7 +27,7 @@ try{
  const ledger=JSON.parse((sqlite.prepare('SELECT payload FROM workspaces').get() as any).payload);
  assert(Math.abs(ledger.charged-0.044)<1e-9,'completed cost is charged once');
  assert.equal(ledger.pending.length,1);
- used=3.95;
+ used=4.70;
  await assert.rejects(()=>startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.1,request),/shared marketplace allowance/);
  assert.equal(starts,45,'actual account usage blocks unaffordable starts');
  used=1.22;paid=true;
@@ -53,5 +53,12 @@ try{
  const reduced=JSON.parse((sqlite.prepare('SELECT payload FROM workspaces').get() as any).payload);
  assert.equal(reduced.pending.filter((p:any)=>!p.runId).length,3,'old uncertain reservations stay intact');
  assert.equal(reduced.pending.at(-1).cap,0.06,'four-cent scraper cap plus two-cent overhead');
+ sqlite.prepare('DELETE FROM workspaces').run();used=3.60;
+ sqlite.prepare('INSERT INTO workspaces VALUES(?,?,?)').run('apify-budget:fixture',JSON.stringify({cycle:cycle.startAt,base:1.2211488155545915,charged:2.145999999999997,pending:[{token:'unknown-a',cap:0.12},{token:'unknown-b',cap:0.12},{token:'unknown-c',cap:0.12}],leaseUntil:0,lease:''}),Date.now());
+ await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},MARKETPLACE_RUN_CAP,request);
+ const recovered=JSON.parse((sqlite.prepare('SELECT payload FROM workspaces').get() as any).payload);
+ assert.equal(recovered.pending.filter((p:any)=>!p.runId).length,3,'recover free headroom without forgiving uncertain charges');
+ used=4.71;
+ await assert.rejects(()=>startBudgetedMarketplaceRun(db,'fixture-key','actor',{},MARKETPLACE_RUN_CAP,request),/shared marketplace allowance/);
  console.log('PASS: real usage, reservation reconciliation, free-only gate, concurrency, ambiguous failure and billing-cycle reset');
 }finally{sqlite.close()}

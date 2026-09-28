@@ -38,12 +38,14 @@ export async function startBudgetedMarketplaceRun(database:Database,key:string,a
    }
   }
   const held=budget.pending.reduce((sum,p)=>sum+p.cap,0);
-  const available=Math.max(0,Math.min(4,limit)-Math.max(used,budget.base+budget.charged)-held);
-  // Leave platform overhead within a small reservation as well as the $1 free-credit cushion.
+  const freeCeiling=Math.max(0,Math.min(5,limit)-0.25);
+  const available=Math.max(0,freeCeiling-Math.max(used,budget.base+budget.charged)-held);
+  // Use verified free credit only, retaining a $0.25 cushion plus per-run overhead.
+  // Unknown starts remain reserved; raising the usable free allowance never erases holds.
   const reservation=cap+0.02;
   if(available+1e-9<reservation){
    await save();
-   throw new MarketplaceError(`MotorScout’s shared marketplace allowance cannot fund another search right now. Your account is connected; no personal setup is needed. Existing results and saved cars remain available. New marketplace searches need restored provider credit. Remaining allowance after reservations: $${available.toFixed(3)}; this search requires $${reservation.toFixed(2)}.`);
+   throw new MarketplaceError(`MotorScout’s shared marketplace allowance cannot fund another search right now. Your account is connected; no personal setup is needed. Existing results and saved cars remain available. The app reserves credit for unfinished or unconfirmed requests and keeps a free-credit buffer. Paid upgrades are not enabled. Remaining allowance after reservations: $${available.toFixed(3)}; this search requires $${reservation.toFixed(2)}.`);
   }
   const hold:Reservation={token:crypto.randomUUID(),cap:reservation};
   budget.pending.push(hold);await save();
