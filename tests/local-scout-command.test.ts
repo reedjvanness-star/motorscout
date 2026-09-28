@@ -12,3 +12,11 @@ assert.equal(localScoutRefinement('only AWD and red',filters),null,'do not drop 
 assert.equal(localScoutRefinement('Only AWD',filters)?.filters.exteriorColor,'green');
 assert.equal(localScoutRefinement('Lower mileage',{...filters,maxMiles:null})?.action,'clarify');
 console.log('PASS: loaded-result refinements preserve requirements and clarify missing mileage');
+
+assert.equal(localScoutRefinement('Only show cars under 60000 miles',filters)?.filters.maxMiles,60000);
+assert.equal(localScoutRefinement('show me ones under 50k miles',filters)?.filters.maxMiles,50000);
+assert.equal(localScoutRefinement('under $40k',filters)?.filters.maxPrice,40000);
+assert.equal(localScoutRefinement('only show green cars',{...filters,exteriorColor:''})?.filters.exteriorColor,'green');
+assert.equal(localScoutRefinement('manual only',filters)?.filters.transmission,'manual');
+assert.equal(localScoutRefinement('under $40k and under 20k miles',filters),null,'compound requests still need full interpretation');
+assert.equal(localScoutRefinement('only red cars',filters),null,'changing an existing color requires fresh matching inventory');
