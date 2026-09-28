@@ -1,4 +1,4 @@
-import {localScoutCommand} from '@/lib/local-scout-command';
+import {localScoutCommand,localScoutRefinement} from '@/lib/local-scout-command';
 import {withMarketplaceAccess} from '@/lib/marketplace-access';
 import {prepareChatComparison} from '@/lib/chat-comparison';
 import {workspaceCars,toggleComparison} from '@/lib/shortlist';
@@ -17,8 +17,12 @@ async function snapshot(id:string){const workspace=await readWorkspace(id),conne
 async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>JSON.parse(n.cars)).find((r:any)=>r.id===carId)}
 export async function GET(req:Request){try{return Response.json(await snapshot(identity(req)),{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{const id=identity(req),a=await boundedJson(req),w=await readWorkspace(id);const reply=(text:string,ids?:string[])=>w.messages.push({role:'assistant',text,ids,at:Date.now()});let search=false;
-if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
+if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:localScoutRefinement(a.text,w.filters)??await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
 if(parsed.question)reply(parsed.question);
+else if(parsed.action==='refine'){
+ w.filters=filterSchema.parse(parsed.filters);w.listings=mergeSearch(w.listings,[],w.filters);w.nextCursor=null;
+ reply(`Filtered the cars already loaded: ${w.listings.length} match. No paid AI call or new marketplace search was used. For fresh inventory, use the filters and press Show matching cars.`,w.listings.slice(0,12).map(car=>car.id));
+}
 else if(parsed.action==='compare')w.messages.push({role:'assistant',...prepareChatComparison(w,a.text),at:Date.now()});
 else if(parsed.action==='save')reply('Use Save on a recommendation to keep it in Saved cars. I won’t guess which car you meant.');
 else if(parsed.action==='alert')reply('Tap “Notify me” beside your results to save your exact requirements and choose notifications. Manage them under Saved searches.');

@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict';
-import {localScoutCommand} from '../lib/local-scout-command';
+import {localScoutCommand,localScoutRefinement} from '../lib/local-scout-command';
+import {filterSchema} from '../lib/domain';
 for(const text of ['Compare cars','Compare my selected cars','Compare the cheapest cars in my results',' compare my saved cars! '])assert.equal(localScoutCommand(text),'compare');
 for(const text of ['Compare cars under $30k','Compare my selected cars but only AWD','Find cars','Compare a BMW to an Audi','Do not compare cars'])assert.equal(localScoutCommand(text),null);
 console.log('PASS: local comparison shortcuts never swallow additional requirements');
+const filters=filterSchema.parse({make:'Audi',model:'RS7',maxMiles:80000,exteriorColor:'green'});
+assert.equal(localScoutRefinement('Lower mileage',filters)?.filters.maxMiles,70000);
+assert.equal(localScoutRefinement('under 60k miles',filters)?.filters.maxMiles,60000);
+assert.equal(localScoutRefinement('under 90k miles',filters),null,'broadening requires a fresh search');
+assert.equal(localScoutRefinement('only AWD and red',filters),null,'do not drop additional requirements');
+assert.equal(localScoutRefinement('Only AWD',filters)?.filters.exteriorColor,'green');
+assert.equal(localScoutRefinement('Lower mileage',{...filters,maxMiles:null})?.action,'clarify');
+console.log('PASS: loaded-result refinements preserve requirements and clarify missing mileage');
