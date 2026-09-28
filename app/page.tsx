@@ -61,8 +61,8 @@ async function act(a:any,resume=false){
  }catch(e){const message=e instanceof Error?e.message:'Please try again.';toast.error(message);setError(message);throw e}
  finally{setBusy(false);setSearchInFlight(false);setStopping(false);setPriceProgress('');setChatPending(null);const next=queuedChat.current;queuedChat.current=null;if(next)await act({action:'chat',text:next},true)}
 }
-async function gatherMarketplaces(searchId:string){
- const queue=connection.apifyShared?['automotive']:['retail','automotive','facebook'];
+async function gatherMarketplaces(searchId:string,expanded=false){
+ const queue=connection.apifyShared||!expanded?['automotive']:['automotive','retail','facebook'];
  for(let batch=0;batch<4&&queue.length;batch++){
  const provider=queue.shift()!;
  if(stopGathering.current||queuedChat.current)break;
@@ -72,13 +72,13 @@ async function gatherMarketplaces(searchId:string){
    await new Promise(resolve=>setTimeout(resolve,5000));if(queuedChat.current)break;result=await call('poll');
    const response=await fetch('/api/workspace');const data:any=await response.json();if(!response.ok)throw Error(data.error);if(data.workspace.searchId!==searchId)return;accept(data);
   }
-  if(result.done&&result.hasMore&&!connection.apifyShared)queue.push(provider);
+  if(expanded&&result.done&&result.hasMore&&!connection.apifyShared)queue.push(provider);
   if(!result.done&&!queuedChat.current)toast.info('Marketplace search is still running. Use Continue marketplace search to retrieve it.');
  }catch(e){const message=e instanceof Error?e.message:'Marketplace search paused. Your existing cars remain available.';setMarketplaceNotice(message);toast.info(message);if(/allowance|credit|billing cycle/i.test(message))break;}
  finally{setPriceProgress('');}
  }
 }
-async function continueMarketplaces(){if(busy||!w.searchId)return;setBusy(true);setSearchInFlight(true);setStopping(false);stopGathering.current=false;try{await gatherMarketplaces(w.searchId)}finally{setBusy(false);setSearchInFlight(false);setStopping(false);setChatPending(null);const next=queuedChat.current;queuedChat.current=null;if(next)await act({action:'chat',text:next},true)}}
+async function continueMarketplaces(){if(busy||!w.searchId)return;setBusy(true);setSearchInFlight(true);setStopping(false);stopGathering.current=false;try{await gatherMarketplaces(w.searchId,true)}finally{setBusy(false);setSearchInFlight(false);setStopping(false);setChatPending(null);const next=queuedChat.current;queuedChat.current=null;if(next)await act({action:'chat',text:next},true)}}
 async function checkPriceBatches(ids:string[]){
  for(let i=0;i<ids.length;i+=5){setPriceProgress(`Checking prices ${i+1}–${Math.min(i+5,ids.length)} of ${ids.length}…`);const response=await fetch('/api/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reviewPrices',ids:ids.slice(i,i+5)})});const data:any=await response.json();if(!response.ok)throw Error(data.error);accept(data);}
 }

@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {reusableMarketplaceJob,MARKETPLACE_REUSE_MS} from '../lib/marketplace-reuse';
+const now=1_800_000_000_000;
+const job={runId:'completed-run',state:'IMPORTED',successful:true,startedAt:now-1000,inputKey:'exact-input'};
+assert(reusableMarketplaceJob(job,'exact-input',now));
+assert(!reusableMarketplaceJob(job,'different-model-or-price',now));
+assert(!reusableMarketplaceJob({...job,successful:false},'exact-input',now));
+assert(!reusableMarketplaceJob({...job,state:'RUNNING'},'exact-input',now));
+assert(!reusableMarketplaceJob({...job,startedAt:now-MARKETPLACE_REUSE_MS},'exact-input',now));
+assert(!reusableMarketplaceJob({...job,startedAt:now+1},'exact-input',now));
+assert(!reusableMarketplaceJob({...job,inputKey:undefined},'exact-input',now));
+assert(!reusableMarketplaceJob(undefined,'exact-input',now));
+console.log('PASS: exact-input reuse, freshness boundary, failed/running/legacy run exclusion');
