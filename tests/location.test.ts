@@ -1,3 +1,4 @@
+import zipData from '../lib/data/us-zips.json';
 import assert from 'node:assert/strict';
 import {filterSchema,initialFilters,matches} from '../lib/domain';
 import {basic} from '../lib/basic-parser';
@@ -7,9 +8,7 @@ import {lookupZip,resolveZip} from '../lib/zip-location';
 import {marketplaceInput,normalizeMarketplace} from '../lib/apify';
 import {marketcheckUrl} from '../lib/marketcheck';
 import {autoDevUrl} from '../lib/autodev';
-const response={country:'United States','post code':'80487',places:[{'place name':'Steamboat Springs','state abbreviation':'CO',latitude:'40.6327',longitude:'-106.9318'}]};
-const request:typeof fetch=async()=>Response.json(response);
-const filters=await resolveZip(filterSchema.parse({make:'Audi',model:'R8',zip:'80487',radiusMiles:50,state:'TX'}),request);
+const filters=await resolveZip(filterSchema.parse({make:'Audi',model:'R8',zip:'80487',radiusMiles:50,state:'TX'}));
 assert.equal(filters.location?.city,'Steamboat Springs');assert.equal(filters.state,'');
 assert.equal(locationLabel(filters),'50 miles from Steamboat Springs, CO 80487');
 assert.equal(zipInText('under 60000 miles'),undefined);assert.equal(zipInText('under $80487'),undefined);
@@ -33,10 +32,11 @@ assert.equal(marketcheckUrl(filters,false).searchParams.get('radius'),'50');
 assert.equal(autoDevUrl(filters).searchParams.get('distance'),'50');
 assert.equal(autoDevUrl(filters).searchParams.has('retailListing.state'),false);
 assert.deepEqual(marketplaceInput(filters).zipCodes,['80487']);assert.equal(marketplaceInput(filters).distanceMiles,50);
-await assert.rejects(()=>lookupZip('00000',async()=>new Response('',{status:404})),/not found/);
-await assert.rejects(()=>lookupZip('80487',async()=>{throw Error('network')}),/unavailable/);
-await assert.rejects(()=>lookupZip('80487',async()=>Response.json({...response,'post code':'02108'})),/verify/);
-assert.equal((await resolveZip({...filters,zip:''},request)).location,null);
+await assert.rejects(()=>lookupZip('00000'),/not found/);
+assert.equal((await lookupZip('02108')).city,'Boston');
+assert.equal((await resolveZip({...filters,zip:''})).location,null);
 const row=normalizeMarketplace({url:'https://www.cars.com/vehicledetail/123/',brand:'Audi',model:'R8',name:'2018 Audi R8',vehicleModelDate:2018,offers:{price:90000,priceCurrency:'USD'},itemLocation:{address:{postalCode:'80487'},geo:{latitude:40.63,longitude:-106.93}}});
 assert.ok(row);assert.equal(matches(row,filters),true);assert.equal(matches({...row,coordinates:null},filters),false);
 console.log('ZIP parsing, lookup failures, radius enforcement and provider parameters passed.');
+
+for(const [zip,p] of Object.entries(zipData)){assert.match(zip,/^\d{5}$/);assert.equal(p.length,4);assert.equal(typeof p[0],'string');assert.match(String(p[1]),/^[A-Z]{2}$/);assert.ok(coordinates(p[2],p[3]));}
