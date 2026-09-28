@@ -13,7 +13,7 @@ export function normalizeFacebook(x:any):Listing|null{
  if(row&&x.payment_time_period)row.priceWarning='This listing reports a recurring payment. Full purchase price is unconfirmed.';
  return row;
 }
-export const MARKETPLACE_RUN_CAP=0.10;
+export const MARKETPLACE_RUN_CAP=0.04;
 export const ACTOR='QvdSsCWLcIKzKSeu3';
 const string=(v:unknown)=>typeof v==='string'?v:'';
 const number=(v:unknown)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):null;
@@ -22,7 +22,7 @@ export function marketplaceInput(f:Filters,batch=0){
  const regions=batch>0?marketplaceRegionBatch('automotive',f.state,batch-1).regions:[];
  return {sources:[...(batch===0?['cars-com','cargurus','truecar']:[]),...(regions.length?['craigslist']:[])],craigslistRegions:regions,make:f.make,model:f.model,
   keywords:[f.trim,f.exteriorColor,f.bodyType,...f.features,...f.requiredTerms].filter(Boolean).length?[[f.make,f.model,f.trim,f.exteriorColor,f.bodyType,...f.features,...f.requiredTerms].filter(Boolean).join(' ')]:[],
-  condition:'used',detail:'full',priceCurrency:'USD',mileageUnit:'mi',maxResultsPerUrl:10,maxResults:40,
+  condition:'used',detail:'full',priceCurrency:'USD',mileageUnit:'mi',maxResultsPerUrl:5,maxResults:15,
   ...(f.minYear!==null?{yearFrom:f.minYear}:{}),...(f.maxPrice!==null?{priceMax:Math.max(0,f.maxPrice-f.shippingAllowance)}:{}),
   ...(f.maxMiles!==null?{mileageMax:f.maxMiles}:{}),...(f.transmission?{transmission:f.transmission}:{}),
   ...(f.fuel?{fuelType:f.fuel==='gasoline'?'gas':f.fuel}:{}),...(f.seller!=='any'?{sellerType:f.seller==='private'?'owner':'dealer'}:{}),...(f.cleanTitle?{titleStatus:'clean'}:{})};
@@ -31,7 +31,7 @@ export function marketplaceInput(f:Filters,batch=0){
 // Discover by make/model, then apply every original requirement locally.
 // CarMax/AutoTrader are excluded after live access failures; never retry blocked sources automatically.
 export function retailerMarketplaceInput(f:Filters){
- return {...marketplaceInput(f),sources:['carvana'],keywords:[],craigslistRegions:[],maxResultsPerUrl:40,maxResults:40};
+ return {...marketplaceInput(f),sources:['carvana'],keywords:[],craigslistRegions:[],maxResultsPerUrl:15,maxResults:15};
 }
 export function retailerMarketplaceSources(rows:Listing[],done:boolean,previous:Source[]):Source[]{
  return ['Carvana'].map(name=>{

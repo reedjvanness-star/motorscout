@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {startBudgetedMarketplaceRun} from '../lib/marketplace-budget';
+import {MARKETPLACE_RUN_CAP} from '../lib/apify';
 
 const sqlite=new DatabaseSync(':memory:');
 sqlite.exec('CREATE TABLE workspaces(user_id TEXT PRIMARY KEY,payload TEXT,updated_at INTEGER)');
@@ -44,5 +45,13 @@ try{
  active=0;used=0;
  await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.1,request);
  assert.equal(JSON.parse((sqlite.prepare('SELECT payload FROM workspaces').get() as any).payload).base,0,'new provider billing cycle resets settled accounting');
+ sqlite.prepare('DELETE FROM workspaces').run();used=3.522;
+ sqlite.prepare('INSERT INTO workspaces VALUES(?,?,?)').run('apify-budget:fixture',JSON.stringify({cycle:cycle.startAt,base:1.2211488155545915,charged:2.068999999999997,pending:[{token:'unresolved-1',cap:0.12},{token:'unresolved-2',cap:0.12},{token:'unresolved-3',cap:0.12}],leaseUntil:0,lease:''}),Date.now());
+ const before=starts;
+ await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},MARKETPLACE_RUN_CAP,request);
+ assert.equal(starts,before+1,'smaller run fits the reported $0.118 balance');
+ const reduced=JSON.parse((sqlite.prepare('SELECT payload FROM workspaces').get() as any).payload);
+ assert.equal(reduced.pending.filter((p:any)=>!p.runId).length,3,'old uncertain reservations stay intact');
+ assert.equal(reduced.pending.at(-1).cap,0.06,'four-cent scraper cap plus two-cent overhead');
  console.log('PASS: real usage, reservation reconciliation, free-only gate, concurrency, ambiguous failure and billing-cycle reset');
 }finally{sqlite.close()}

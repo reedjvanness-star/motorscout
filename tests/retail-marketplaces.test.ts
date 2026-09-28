@@ -11,7 +11,7 @@ assert.equal(normalizeMarketplace({...raw,url:rows[0].url,itemCondition:'https:/
 assert.equal(rank(rows,rows,{...initialFilters,maxPrice:20000}).length,0);
 assert.equal(rank(rows,rows,{...initialFilters,exteriorColor:'green'}).length,0);
 const input=retailerMarketplaceInput({...initialFilters,make:'Toyota',model:'Camry',maxPrice:25000,shippingAllowance:1000});
-assert.deepEqual(input.sources,['carvana']);assert.equal(input.maxResults,40);assert.equal(input.priceMax,24000);
+assert.deepEqual(input.sources,['carvana']);assert.equal(input.maxResults,15);assert.equal(input.priceMax,24000);
 assert.deepEqual(input.craigslistRegions,[]);
 const blocked={name:'Carvana',status:'error' as const,detail:'MarketCheck HTTP 429'};
 assert.equal(retailerMarketplaceSources(rows,true,[blocked])[0].status,'searched');
