@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {photoUrls,fetchVehiclePhotos} from '../lib/vehicle-photos';
+import {photoUrls,fetchVehiclePhotos,listingPhotoUrls} from '../lib/vehicle-photos';
 import {normalizeMarketplace} from '../lib/apify';
 import {normalizeMarketcheck} from '../lib/marketcheck';
 import {deduplicate} from '../lib/domain';
@@ -18,3 +18,10 @@ await assert.rejects(()=>fetchVehiclePhotos('../bad','test',fetcher),/valid VIN/
 assert.deepEqual(await fetchVehiclePhotos('WP0AA2990WS321225','test',async()=>new Response('',{status:404})),[]);
 await assert.rejects(()=>fetchVehiclePhotos('WP0AA2990WS321225','test',async()=>new Response('',{status:429})),/allowance/);
 console.log('PASS: image normalization, gallery retention, safe VIN requests and provider failure handling');
+
+const sameVinOtherSeller={...car,vin:'4S4GUHF63S3720418',url:'https://another-dealer.example/car',photosSourceUrl:'https://another-dealer.example/car',photo:'https://images.example/other-car.jpg',photos:['https://images.example/other-car.jpg']};
+assert(!deduplicate([{...car,vin:'4S4GUHF63S3720418'},sameVinOtherSeller])[0].photos?.includes(sameVinOtherSeller.photo),'never mix another seller gallery');
+assert.deepEqual(listingPhotoUrls({...car,photosSourceUrl:undefined}),[first],'legacy photos without provenance stay hidden');
+assert.deepEqual(listingPhotoUrls({...car,photosSourceUrl:car.url}),[first,second]);
+assert.deepEqual(listingPhotoUrls({...car,photo:'https://images.example/stock-photo.jpg',photos:[]}),[]);
+assert.deepEqual(listingPhotoUrls({...car,vin:'4S4GUHF63S3720418',photo:'https://images.example/4S4GUHF69S3746473/1.jpg',photos:[]}),[],'reject photo paths containing a different VIN');

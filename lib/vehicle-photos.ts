@@ -1,3 +1,4 @@
+import type {Listing} from './domain';
 // Preserve actual provider images; never manufacture angles or substitute stock cars.
 export function photoUrls(...values:unknown[]):string[]{
  const urls=new Set<string>();
@@ -19,4 +20,14 @@ export async function fetchVehiclePhotos(vin:string,key:string,request:typeof fe
  if(response.status===404)return [];
  if(!response.ok)throw Error(response.status===429?'The photo provider has reached its allowance. Available listing photos are still here.':'Extra photos are unavailable right now. You can still view the listing photos.');
  const data:any=await response.json();return photoUrls(data.data?.retail);
+}
+
+// Extra photos must belong to the selected source URL, not just the same VIN.
+export function listingPhotoUrls(car:Pick<Listing,'photo'|'photos'|'photosSourceUrl'|'url'|'vin'>){
+ return photoUrls(car.photo,car.photosSourceUrl===car.url?car.photos:[]).filter(value=>{
+  const url=new URL(value);
+  if(/(?:placeholder|no[-_]?image|image[-_]?not[-_]?available|stock[-_]?photo)/i.test(url.pathname))return false;
+  const vins=url.pathname.match(/(?<![a-z0-9])[a-hj-npr-z0-9]{17}(?![a-z0-9])/gi)??[];
+  return !car.vin||vins.every(v=>v.toUpperCase()===car.vin!.toUpperCase());
+ });
 }

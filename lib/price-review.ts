@@ -100,7 +100,7 @@ export function inspectListingPage(row:Listing,html:string,now=new Date().toISOS
 
 // Explicit public hosts from the audited inventory. No arbitrary URLs, credentials,
 // IP addresses, or cross-host redirects may be supplied by a client.
-const hosts=new Set(audited.map(r=>new URL(r.url).hostname.replace(/^www\./,'')));
+const hosts=new Set([...audited.map(r=>new URL(r.url).hostname.replace(/^www\./,'')),'loveford.com']);
 export function canCheckListingPrice(row:Listing){try{return hosts.has(new URL(row.url).hostname.replace(/^www\./,''))}catch{return false}}
 export async function checkListingPrice(row:Listing,request:typeof fetch=fetch):Promise<PriceReview>{
   const base={checkedAt:new Date().toISOString(),reportedPrice:row.priceReview?.reportedPrice??row.price};

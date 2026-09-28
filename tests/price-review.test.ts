@@ -63,3 +63,7 @@ assert.equal(checkedCamry.total,13720);
 assert.equal(rank([checkedCamry],[],{...initialFilters,maxPrice:10000}).length,0);
 assert.equal(rank([checkedCamry],[],{...initialFilters,maxPrice:15000}).length,1);
 assert(applyPriceReview(camry,camryReview,Date.parse(camryReview.checkedAt)+86400000).priceWarning);
+
+const loveford={...car,vin:'4S4GUHF63S3720418',url:'https://www.loveford.com/used-Loveland-2025-Subaru-Crosstrek-Sport-4S4GUHF63S3720418',price:1500};
+const lovePage=`<p>VIN ${loveford.vin}</p><div id="buy-${loveford.vin}">${highlight('dealerDiscount',1500,'Savings')}${highlight('featuredPrice',29497,'Internet Price')}</div>`;
+assert.equal((await checkListingPrice(loveford,async()=>new Response(lovePage,{headers:{'content-type':'text/html'}}))).sourcePrice,29497);
