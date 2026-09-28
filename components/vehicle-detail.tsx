@@ -3,12 +3,12 @@ import {Button} from '@/components/ui/button';
 import {PriceStatus} from '@/components/price-status';
 import {MarketValue} from '@/components/market-value';
 import {money,type Listing} from '@/lib/domain';
-import {VehiclePhoto} from './vehicle-photo';
+import {VehicleGallery} from './vehicle-gallery';
 
 export function VehicleDetail({car,pool,onOpen,busy,saved,compared,onSave,onCompare}:{car:Listing;pool:Listing[];onOpen:(car:Listing)=>void;busy:boolean;saved:boolean;compared:boolean;onSave:()=>void;onCompare:()=>void}){
  const specs=[['Mileage',car.miles===null?'Not provided':car.miles.toLocaleString()+' miles'],['Location',[car.city,car.state].filter(Boolean).join(', ')],['Trim',car.trim],['Exterior',car.exteriorColor],['Transmission',car.transmission],['Drivetrain',car.drive],['Fuel',car.fuel],['Body style',car.bodyType],['Seller',car.seller==='unknown'?'Not provided':car.seller],['Title',car.titleStatus==='unknown'?'Not provided':car.titleStatus]];
  return <div className="vehicle-detail-content">
-  <VehiclePhoto src={car.photo} title={car.title} className="vehicle-hero" loading="eager"/>
+  <VehicleGallery key={car.id} car={car}/>
   <div className="vehicle-overview"><div><p className="vehicle-source">Listed on {car.source}</p><h2>{car.priceWarning?'Full price unavailable':money(car.price)}</h2><p className="helper">{car.priceWarning?'Seller confirmation needed':'Asking price · confirm taxes and fees with the seller'}</p></div><div className="car-actions"><Button variant="outline" disabled={busy} aria-pressed={saved} onClick={onSave}>{saved?<X/>:<Bookmark/>}{saved?'Remove from saved':'Save car'}</Button><Button variant="outline" disabled={busy} aria-pressed={compared} onClick={onCompare}>{compared?<X/>:<Plus/>}{compared?'Remove from compare':'Compare'}</Button></div></div>
   <dl className="vehicle-specs">{specs.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value||'Not provided'}</dd></div>)}</dl>
   {!!car.features?.length&&<section><h3>Listed equipment</h3><div className="vehicle-features">{car.features.map(feature=><span key={feature}>{feature}</span>)}</div></section>}

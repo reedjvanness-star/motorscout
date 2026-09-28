@@ -1,3 +1,4 @@
+import {photoUrls} from './vehicle-photos';
 import {detailFilterShape,detailsMatch,detailChanges,type VehicleDetails} from './vehicle-requirements';
 import {locationMatches,type ListingLocation} from './location';
 import { z } from 'zod';
@@ -7,7 +8,7 @@ export const filterSchema=z.object({...detailFilterShape,make:z.string().max(40)
 export type Filters=z.infer<typeof filterSchema>;
 export const initialFilters:Filters=filterSchema.parse({});
 export type ListingOffer={priceWarning?:string|null;source:string;url:string;price:number;fees:number|null;checkedAt:string};
-export type Listing=VehicleDetails&ListingLocation&{priceReview?:PriceReview;priceWarning?:string|null;offers?:ListingOffer[];id:string;vin:string|null;title:string;make:string;model:string;trim:string;year:number|null;price:number;miles:number|null;state:string;city:string;source:string;url:string;photo:string|null;seller:'private'|'dealer'|'unknown';drive:string;titleStatus:string;condition:string;history:string;fees:number|null;checkedAt:string;sourceUpdatedAt:string|null;concerns:string[];comparables:{id:string;title:string;price:number;miles:number|null;url:string}[];median:number|null;reason:string;total:number};
+export type Listing=VehicleDetails&ListingLocation&{priceReview?:PriceReview;priceWarning?:string|null;offers?:ListingOffer[];photos?:string[];id:string;vin:string|null;title:string;make:string;model:string;trim:string;year:number|null;price:number;miles:number|null;state:string;city:string;source:string;url:string;photo:string|null;seller:'private'|'dealer'|'unknown';drive:string;titleStatus:string;condition:string;history:string;fees:number|null;checkedAt:string;sourceUpdatedAt:string|null;concerns:string[];comparables:{id:string;title:string;price:number;miles:number|null;url:string}[];median:number|null;reason:string;total:number};
 export type Source={name:string;status:'ready'|'unavailable'|'searched'|'error';detail:string;count?:number;total?:number;inspected?:number;hasMore?:boolean};
 export type Message={role:'user'|'assistant';text:string;ids?:string[];target?:'compare';at:number};
 export function availableComparisonIds(rows:Listing[],ids:string[]){const available=new Set(rows.map(r=>r.id));return [...new Set(ids)].filter(id=>available.has(id));}
@@ -37,7 +38,7 @@ export function deduplicate(rows:Listing[]){
     const ordered=[...group].sort((a,b)=>Number(!!a.priceWarning)-Number(!!b.priceWarning)||(a.price+(a.fees??0))-(b.price+(b.fees??0))||Date.parse(b.checkedAt)-Date.parse(a.checkedAt));
     const offers=new Map<string,ListingOffer>();
     for(const row of ordered)for(const offer of row.offers??[{source:row.source,url:row.url,price:row.price,fees:row.fees,checkedAt:row.checkedAt,priceWarning:row.priceWarning}])if(!offers.has(offer.url))offers.set(offer.url,offer);
-    return {...ordered[0],offers:[...offers.values()]};
+    return {...ordered[0],photos:photoUrls(...ordered.flatMap(row=>[row.photo,row.photos])),offers:[...offers.values()]};
   });
 }
 const eq=(a:string,b:string)=>vehicleNameKey(a)===vehicleNameKey(b);

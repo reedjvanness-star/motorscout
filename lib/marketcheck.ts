@@ -1,3 +1,4 @@
+import {photoUrls} from './vehicle-photos';
 import {knownFeatures} from './vehicle-requirements';
 import {safeUrl, priceWarning, type Filters, type Listing} from './domain';
 
@@ -75,7 +76,7 @@ export function normalizeMarketcheck(x: any, privateSeller: boolean): Listing | 
     year: number(b.year), priceWarning:priceWarning(price,number(b.year)), price, miles: number(x.miles),
     state: String(x.dealer?.state ?? x.seller?.state ?? x.state ?? '').toUpperCase(),
     city: String(x.dealer?.city ?? x.seller?.city ?? x.city ?? ''),
-    source: new URL(url).hostname, url, photo: safeUrl(x.media?.photo_links?.[0]),
+    source: new URL(url).hostname, url, photo: safeUrl(x.media?.photo_links?.[0]), photos:photoUrls(x.media?.photo_links),
     seller: privateSeller ? 'private' : 'dealer', drive: String(b.drivetrain ?? ''),
     titleStatus: x.carfax_clean_title === true ? 'clean' : 'unknown', condition: 'used', history: 'unknown',
     fees, checkedAt: new Date().toISOString(), sourceUpdatedAt: typeof x.last_seen_at_date === 'string' ? x.last_seen_at_date : null,
