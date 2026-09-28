@@ -12,7 +12,7 @@ assert.deepEqual(deduplicate([car,{...car,photos:['https://images.example/third.
 const marketplace=normalizeMarketplace({url:'https://cars.com/vehicledetail/1/',brand:'Audi',model:'R8',offers:{price:50000,priceCurrency:'USD'},image:[{url:first},{url:second}]});
 assert.equal(marketplace?.photo,first);assert.deepEqual(marketplace?.photos,[first,second]);
 let calls=0;
-const fetcher:typeof fetch=async(url,init)=>{calls++;assert.equal(String(url),'https://api.auto.dev/photos/WP0AA2990WS321225');assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer test');return Response.json({data:{retail:[first,second]}})};
+const fetcher:typeof fetch=async(url,init)=>{calls++;assert.equal(init?.redirect,'manual');assert.equal(String(url),'https://api.auto.dev/photos/WP0AA2990WS321225');assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer test');return Response.json({data:{retail:[first,second]}})};
 assert.deepEqual(await fetchVehiclePhotos('WP0AA2990WS321225','test',fetcher),[first,second]);
 await assert.rejects(()=>fetchVehiclePhotos('../bad','test',fetcher),/valid VIN/);assert.equal(calls,1);
 assert.deepEqual(await fetchVehiclePhotos('WP0AA2990WS321225','test',async()=>new Response('',{status:404})),[]);
