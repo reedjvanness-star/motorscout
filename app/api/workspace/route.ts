@@ -1,3 +1,5 @@
+import {resolveZip} from '@/lib/zip-location';
+import {localLocationCommand} from '@/lib/location-command';
 import {localScoutCommand,localScoutRefinement} from '@/lib/local-scout-command';
 import {withMarketplaceAccess} from '@/lib/marketplace-access';
 import {prepareChatComparison} from '@/lib/chat-comparison';
@@ -17,7 +19,7 @@ async function snapshot(id:string){const workspace=await readWorkspace(id),conne
 async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>JSON.parse(n.cars)).find((r:any)=>r.id===carId)}
 export async function GET(req:Request){try{return Response.json(await snapshot(identity(req)),{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{const id=identity(req),a=await boundedJson(req),w=await readWorkspace(id);const reply=(text:string,ids?:string[])=>w.messages.push({role:'assistant',text,ids,at:Date.now()});let search=false;
-if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:localScoutRefinement(a.text,w.filters)??await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
+if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:localScoutRefinement(a.text,w.filters)??localLocationCommand(a.text,w.filters)??await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
 if(parsed.question)reply(parsed.question);
 else if(parsed.action==='refine'){
  w.filters=filterSchema.parse(parsed.filters);w.listings=mergeSearch(w.listings,[],w.filters);w.nextCursor=null;
@@ -26,7 +28,7 @@ else if(parsed.action==='refine'){
 else if(parsed.action==='compare')w.messages.push({role:'assistant',...prepareChatComparison(w,a.text),at:Date.now()});
 else if(parsed.action==='save')reply('Use Save on a recommendation to keep it in Saved cars. I won’t guess which car you meant.');
 else if(parsed.action==='alert')reply('Tap “Notify me” beside your results to save your exact requirements and choose notifications. Manage them under Saved searches.');
-else{w.filters=parsed.filters;search=true;}}
+else{w.filters=filterSchema.parse(parsed.filters);search=true;}}
 else if(a.action==='search'){await limitUsage(id);w.filters=filterSchema.parse(a.filters);w.pending=null;search=true;}
 else if(a.action==='nextBatch'){if(!w.nextCursor)throw Error('No further inventory pages are available.');if(a.searchId!==w.searchId)throw Error('Your search changed. Use the latest results.');if(a.cursor!==JSON.stringify(w.nextCursor))throw Error('These results have already advanced. Refresh to continue.');await limitUsage(id+':inventory-pages',5000);search=true;}
 else if(a.action==='confirm'){if(!w.pending)throw Error('No filter change is waiting for confirmation.');await limitUsage(id);w.filters=w.pending;w.pending=null;search=true;}
@@ -88,7 +90,7 @@ if(search){
   const continuing=a.action==='nextBatch';
   const cursor=continuing?(a.automatic?healthyCursor(w.nextCursor,w.sources):w.nextCursor):undefined;
   if(continuing&&!cursor)throw Error('Remaining sources are unavailable. Your collected cars are still here.');
-  if(!continuing)w.filters=await resolveSearchVehicle(id,w.filters);
+  if(!continuing)w.filters=await resolveSearchVehicle(id,await resolveZip(w.filters));
   const result=await searchListings(w.filters,await inventoryKeys(id),cursor??undefined,!continuing);
   const latest=await readWorkspace(id);
   if(latest.searchId!==w.searchId||(continuing&&JSON.stringify(latest.nextCursor)!==JSON.stringify(w.nextCursor)))throw Error('Your search changed while inventory was loading.');

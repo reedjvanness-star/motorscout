@@ -1,3 +1,4 @@
+import {applyLocationText} from './location-command';
 import {initialFilters,filterSchema,type Filters} from './domain';
 import {vehicles,curatedVehicles,states} from './vehicle-options';
 import {normalizeMercedesText,normalizeAudiText,vehicleNameKey} from './vehicle-identity';
@@ -21,7 +22,7 @@ const price=t.match(/(?:under|budget(?: of| is)?|less than|maximum|max|up to)\s*
 if(!price){const bare=t.match(/(?:under|budget(?: of| is)?|less than|maximum|max|up to)\s+([\d,.]+k?)(\s*\w*)/);if(bare&&!/^\s*(miles|mi)\b/.test(bare[2])){f.maxPrice=number(bare[1]);recognized=true}}
 const miles=t.match(/(?:under|fewer than|less than|max(?:imum)?|up to)\s*([\d,.]+k?)\s*(?:miles|mi\b)/);if(miles){f.maxMiles=number(miles[1]);recognized=true}
 if(/lower mileage/.test(t)){if(f.maxMiles!==null){f.maxMiles=Math.max(0,f.maxMiles-10000);recognized=true}else question='What maximum mileage would you like? You can select it with the mileage slider.'}
-const state=states.find(([code,name])=>has(text,name)||new RegExp('\\bin\\s+'+code+'\\b','i').test(text));if(state){f.state=state[0];recognized=true}if(/nationwide|anywhere in (the )?us/.test(t)){f.state='';recognized=true}
+const state=states.find(([code,name])=>has(text,name)||new RegExp('\\bin\\s+'+code+'\\b','i').test(text));if(state){f.state=state[0];f.zip='';f.location=null;recognized=true}if(/nationwide|anywhere in (the )?us/.test(t)){f.state='';f.zip='';f.location=null;recognized=true}const located=applyLocationText(text,f);if(located.zip!==f.zip||located.radiusMiles!==f.radiusMiles)recognized=true;Object.assign(f,located);
 if(/\bonly awd\b|\bawd only\b|all.wheel drive/.test(t)){f.awd=true;recognized=true}if(/private seller|private owner/.test(t)){f.seller='private';recognized=true}if(/dealers only|only dealers/.test(t)){f.seller='dealer';recognized=true}if(/clean title/.test(t)){f.cleanTitle=true;recognized=true}
 const limit=t.match(/top\s+(\d+|three|five|ten)/);if(limit){f.limit=limit[1]==='three'?3:limit[1]==='five'?5:limit[1]==='ten'?10:Number(limit[1]);recognized=true}
 const year=t.match(/(?:from|since|at least|minimum year|newer than)\s*(20\d{2}|19\d{2})/);if(year){f.minYear=Number(year[1]);recognized=true}

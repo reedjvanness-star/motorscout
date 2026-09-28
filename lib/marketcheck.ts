@@ -20,6 +20,7 @@ export function marketcheckUrl(f: Filters, privateSeller: boolean, offset = 0, a
   if(f.transmission)p.set('transmission',f.transmission);
   if(f.features?.length)p.set('high_value_features',f.features.map(x=>x==='sunroof'?'Sun/moonroof':x).join(','));
   if(f.drivetrain)p.set('drivetrain',f.drivetrain.toUpperCase());
+  if(f.zip){p.set('zip',f.zip);p.set('radius',String(f.radiusMiles));}
   for (const k of ['make', 'model', 'trim', 'state'] as const) if (f[k]) p.set(k, f[k]);
   if (f.maxPrice !== null) p.set('price_range', `1-${Math.max(1, f.maxPrice - f.shippingAllowance)}`);
   if (f.maxMiles !== null) p.set('miles_range', `0-${f.maxMiles}`);

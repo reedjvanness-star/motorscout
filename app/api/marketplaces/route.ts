@@ -1,3 +1,4 @@
+import {locateListings} from '@/lib/zip-location';
 import {identity,db,readWorkspace,writeWorkspace,boundedJson,failure} from '@/lib/server';
 import {reserveBetaSearch} from '@/lib/shared-marketplace';
 import {providerKey,connectionStatus} from '@/lib/connections';
@@ -54,10 +55,11 @@ export async function POST(req:Request){try{
  const done=terminal(data.status);
  const raw=data.defaultDatasetId?await apifyRequest(key,`datasets/${encodeURIComponent(data.defaultDatasetId)}/items?format=json&clean=true&limit=100`):[];
  if(!Array.isArray(raw))throw Error('Invalid marketplace inventory response.');
- const rows=raw.map(facebook?normalizeFacebook:normalizeMarketplace).filter((r:Listing|null):r is Listing=>r!==null).map(row=>({...row,checkedAt:new Date(job!.startedAt).toISOString()}));
+ const unlocated=raw.map(facebook?normalizeFacebook:normalizeMarketplace).filter((r:Listing|null):r is Listing=>r!==null).map(row=>({...row,checkedAt:new Date(job!.startedAt).toISOString()}));
+ const rows=await locateListings(unlocated,w.filters);
  const latest=await readWorkspace(id);if(latest.searchId!==w.searchId)throw Error('Your search changed while marketplaces were loading.');
  latest.listings=mergeSearch(latest.listings,rows,latest.filters);
- const sources:Source[]=retail?retailerMarketplaceSources(rows,done,latest.sources):facebook?[{name:'Facebook Marketplace',status:rows.length?'searched':done?'error':'ready',count:rows.length,inspected:rows.length,detail:`Local search centers: ${marketplaceRegionBatch('facebook',latest.filters.state).regions.join(', ')}. Partial coverage only. ${rows.length} usable vehicles returned. Your exact filters are applied before display.`}]:marketplaceSources(rows,done,latest.filters.state,job.batch??0);latest.sources=[...latest.sources.filter(s=>!sources.some(n=>n.name===s.name)),...sources];
+ const sources:Source[]=retail?retailerMarketplaceSources(rows,done,latest.sources):facebook?[{name:'Facebook Marketplace',status:rows.length?'searched':done?'error':'ready',count:rows.length,inspected:rows.length,detail:`Local search centers: ${marketplaceRegionBatch('facebook',latest.filters.state).regions.join(', ')}. Partial coverage only. ${rows.length} usable vehicles returned. Your exact filters are applied before display.`}]:marketplaceSources(rows,done,latest.filters.state,job.batch??0);if(w.filters.zip)for(const source of sources)source.detail+=` Only vehicles with verifiable locations within ${w.filters.radiusMiles} miles of ${w.filters.zip} appear. Listings without location evidence are excluded.`;latest.sources=[...latest.sources.filter(s=>!sources.some(n=>n.name===s.name)),...sources];
  if(done){const n=latest.listings.length;latest.messages.push({role:'assistant',at:Date.now(),text:`Marketplace search finished. ${n} cars match your current requirements.${n<5?' Fewer than five exact matches were found in the inventory checked; your specifications have not been relaxed.':''}`,ids:latest.listings.slice(0,12).map(r=>r.id)});}
  // Repeated completed polls must not duplicate messages.
  if(job.state!== 'IMPORTED')await writeWorkspace(id,latest);

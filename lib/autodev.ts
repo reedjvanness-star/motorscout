@@ -14,6 +14,7 @@ export function autoDevUrl(f:Filters,position='1'){
   if(f.transmission)u.searchParams.set('vehicle.transmission',f.transmission);
   if(f.fuel)u.searchParams.set('vehicle.fuel',f.fuel);
   for(const field of ['make','model','trim'] as const)if(f[field])u.searchParams.set(`vehicle.${field}`,f[field]);
+  if(f.zip){u.searchParams.set('zip',f.zip);u.searchParams.set('distance',String(f.radiusMiles));}
   if(f.state)u.searchParams.set('retailListing.state',f.state);
   if(f.maxPrice!==null)u.searchParams.set('retailListing.price',`1-${Math.max(1,f.maxPrice-f.shippingAllowance)}`);
   if(f.maxMiles!==null)u.searchParams.set('retailListing.miles',`0-${f.maxMiles}`);

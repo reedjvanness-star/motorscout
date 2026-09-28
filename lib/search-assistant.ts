@@ -1,8 +1,10 @@
+import {applyLocationText} from './location-command';
 import {filterSchema,type Filters,type Message} from './domain';
 import {detailProperties} from './vehicle-requirements';
 import {basic} from './basic-parser';
-const properties={...detailProperties,make:{type:'string'},model:{type:'string'},trim:{type:'string'},maxPrice:{type:['number','null']},maxMiles:{type:['number','null']},minYear:{type:['number','null']},state:{type:'string'},seller:{type:'string',enum:['any','private','dealer']},awd:{type:'boolean'},cleanTitle:{type:'boolean'},shippingAllowance:{type:'number'},limit:{type:'number'}};
+const properties={...detailProperties,make:{type:'string'},model:{type:'string'},trim:{type:'string'},maxPrice:{type:['number','null']},maxMiles:{type:['number','null']},minYear:{type:['number','null']},state:{type:'string'},zip:{type:'string'},radiusMiles:{type:'number'},seller:{type:'string',enum:['any','private','dealer']},awd:{type:'boolean'},cleanTitle:{type:'boolean'},shippingAllowance:{type:'number'},limit:{type:'number'}};
 const instructions=`You translate a user's used-car shopping request into exact inventory requirements. Always call update_search. Never return the user's words as a clarification or merely paraphrase a search: action search actually executes it.
+For a U.S. ZIP location use zip as a five-digit string (preserve leading zeros), state empty, and radiusMiles for distance from the ZIP center. Use 100 miles unless the user specifies another radius. Keep ZIP/radius on follow-ups; clear zip when the user changes to a state or nationwide. Never confuse ZIP codes with budgets or vehicle mileage.
 Support exterior color, body type (truck=pickup), fuel, transmission, drivetrain (4x4=four-wheel-drive=4wd, distinct from awd), cab style, and each listed equipment feature, plus make/model/trim, budget, mileage, oldest year, state, seller, clean title, and shipping reserve.
 Use exteriorColor for exterior paint only. A green truck with black leather has exteriorColor green, bodyType pickup, features leather seats and requiredTerms ["black leather"]. Additional terms need explicit seller evidence; never infer interior color from paint. Never silently omit any must-have. Features and requiredTerms are ALL required, not alternatives. Ask a specific question if an OR choice cannot be represented.
 Carry forward all active requirements on follow-ups such as 'only diesel', 'make it blue', or 'under 60k miles'. A clearly new make/model request such as 'find a green M4' after trucks starts a fresh search: clear previous body type, cab, drivetrain, features, color, budget, mileage, year, seller and location unless the user says to keep them or states them again. Follow-ups about the SAME car keep active requirements. Never carry a truck's crew cab or 4WD requirement into a sports-car search. Set awd false when explicitly requesting 4wd/fwd/rwd, and use drivetrain. If no change was requested, keep the existing value. Do not infer clean title, location, or features from appearance.
@@ -25,7 +27,7 @@ export async function interpretSearch(text:string,filters:Filters,messages:Messa
  if(call?.function?.name!=='update_search')throw Error('The assistant did not provide executable search filters. Please retry.');
  const args=JSON.parse(call.function.arguments);
  if(!['search','clarify','compare','save','alert'].includes(args.action))throw Error('The assistant returned an invalid action. Your filters are unchanged.');
- const parsed=filterSchema.parse(args.filters);
+ const parsed=filterSchema.parse(applyLocationText(text,args.filters));
  const question=args.action==='clarify'?String(args.question??'').trim().slice(0,600):'';
  if(args.action==='clarify'&&(!question||question.toLowerCase()===text.trim().toLowerCase()))return basic(text,current);
  return {filters:parsed,question,action:args.action,mode:'AI'};

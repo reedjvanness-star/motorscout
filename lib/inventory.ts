@@ -128,7 +128,7 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
     }catch(error){next.retailers=offset;for(const s of [source,...brands]){s.status='error';s.hasMore=true;s.detail=failureDetail(error);}}
   }
   await Promise.all([market(false),market(true),market(false,true),auto(),autotrader(),retail()]);
-  const rows=groups.flat().map(r=>applyPriceReview(r));
+  const rows=groups.flat().map(r=>applyPriceReview(f.zip?{...r,locationQuery:{zip:f.zip,radiusMiles:f.radiusMiles}}:r));
   const candidates=rows.map((row,index)=>({row,index})).filter(({row})=>discountRisk(row)&&!checkedFullPrice(row)&&canCheckListingPrice(row)).slice(0,10);
   for(let i=0;i<candidates.length;i+=5)await Promise.all(candidates.slice(i,i+5).map(async({row,index})=>{rows[index]=applyPriceReview(row,await checkListingPrice(row,request));}));
   let rowOffset=0;
@@ -137,6 +137,7 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
     const flagged=reviewed.filter(r=>r.priceWarning).length;
     if(flagged)sources[i].detail+=` ${flagged} unconfirmed amounts are excluded when a maximum budget is set.`;
   }
+  if(f.zip)for(const source of sources)if(source.status==='searched'&&source.inspected!==undefined)source.detail+=` Provider location filter: within ${f.radiusMiles} miles of ZIP ${f.zip}.`;
   // Keep every eligible car in a fetched batch; display pagination happens locally.
   return {listings:rank(rows,rows,f,rows.length),sources,checkedAt:new Date().toISOString(),nextCursor:Object.values(next).some(v=>v!==null)?next:null};
 }

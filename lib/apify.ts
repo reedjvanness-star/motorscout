@@ -1,3 +1,4 @@
+import {coordinates} from './location';
 import {safeUrl,priceWarning,type Listing,type Filters,type Source} from './domain';
 import {craigslistHost,marketplaceRegionBatch} from './marketplace-regions';
 import {knownFeatures} from './vehicle-requirements';
@@ -20,7 +21,7 @@ const number=(v:unknown)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Numbe
 export function marketplaceInput(f:Filters,batch=0){
  // Live actor schema accepts region slugs, despite its public docs showing hostnames.
  const regions=batch>0?marketplaceRegionBatch('automotive',f.state,batch-1).regions:[];
- return {sources:[...(batch===0?['cars-com','cargurus','truecar']:[]),...(regions.length?['craigslist']:[])],craigslistRegions:regions,make:f.make,model:f.model,
+ return {...(f.zip?{zipCodes:[f.zip],distanceMiles:f.radiusMiles}:{}),sources:[...(batch===0?['cars-com','cargurus','truecar']:[]),...(regions.length?['craigslist']:[])],craigslistRegions:regions,make:f.make,model:f.model,
   keywords:[f.trim,f.exteriorColor,f.bodyType,...f.features,...f.requiredTerms].filter(Boolean).length?[[f.make,f.model,f.trim,f.exteriorColor,f.bodyType,...f.features,...f.requiredTerms].filter(Boolean).join(' ')]:[],
   condition:'used',detail:'full',priceCurrency:'USD',mileageUnit:'mi',maxResultsPerUrl:5,maxResults:15,
   ...(f.minYear!==null?{yearFrom:f.minYear}:{}),...(f.maxPrice!==null?{priceMax:Math.max(0,f.maxPrice-f.shippingAllowance)}:{}),
@@ -68,7 +69,7 @@ export function normalizeMarketplace(x:any):Listing|null{
  const address=x.itemLocation?.address??{};
  const warning=payment?'This amount may be a payment or deposit. Full purchase price is unconfirmed.':priceWarning(price,year);
  return {id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
- state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:safeUrl(Array.isArray(x.image)?x.image[0]:x.image?.url??x.image),
+ postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(x.itemLocation?.geo?.latitude,x.itemLocation?.geo?.longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:safeUrl(Array.isArray(x.image)?x.image[0]:x.image?.url??x.image),
  exteriorColor:string(host==='craigslist.org'?x.additionalProperties?.exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType)==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
  evidenceText:[title,description,...(Array.isArray(x.features)?x.features.map((v:any)=>string(v?.name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||offer?.seller?.['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
  titleStatus:['clean','rebuilt','salvage'].includes(x.titleStatus)?x.titleStatus:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
