@@ -1,8 +1,9 @@
 import {rank,type Listing,type Source,type SearchCursor,type Filters} from './domain';
 import {applyPriceReview} from './price-review';
 
-export const AUTO_SEARCH_PAGES=20;
-export const AUTO_SEARCH_MATCHES=2500;
+// A bounded first pass; shoppers explicitly continue when they want more inventory.
+export const AUTO_SEARCH_PAGES=3;
+export const AUTO_SEARCH_MATCHES=200;
 const slots=['dealer','private','auction','autodev','autotrader','retailers'] as const;
 export function healthyCursor(cursor:SearchCursor|null|undefined,sources:Source[]):SearchCursor|null{
  if(!cursor)return null;

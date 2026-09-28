@@ -1,3 +1,4 @@
+import {localScoutCommand} from '@/lib/local-scout-command';
 import {withMarketplaceAccess} from '@/lib/marketplace-access';
 import {prepareChatComparison} from '@/lib/chat-comparison';
 import {workspaceCars,toggleComparison} from '@/lib/shortlist';
@@ -16,7 +17,7 @@ async function snapshot(id:string){const workspace=await readWorkspace(id),conne
 async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>JSON.parse(n.cars)).find((r:any)=>r.id===carId)}
 export async function GET(req:Request){try{return Response.json(await snapshot(identity(req)),{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{const id=identity(req),a=await boundedJson(req),w=await readWorkspace(id);const reply=(text:string,ids?:string[])=>w.messages.push({role:'assistant',text,ids,at:Date.now()});let search=false;
-if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const parsed=await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
+if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
 if(parsed.question)reply(parsed.question);
 else if(parsed.action==='compare')w.messages.push({role:'assistant',...prepareChatComparison(w,a.text),at:Date.now()});
 else if(parsed.action==='save')reply('Use Save on a recommendation to keep it in Saved cars. I won’t guess which car you meant.');
