@@ -41,3 +41,9 @@ for(const evidence of ['Heated seats available separately','Heated seats are an 
  assert(!detailsMatch({drive:'',features},{features:['heated seats']}));
 }
 assert.deepEqual(knownFeatures(['Heated front seats included']),['heated seats'],'affirmative fitted equipment remains available');
+
+const grayCar=normalizeMarketcheck({id:'gray-car',vdp_url:'https://example.test/gray-car',price:30000,inventory_type:'used',exterior_color:'Nardo Grey Metallic',build:{make:'Audi',model:'S4',year:2020}},false)!;
+assert(matches(grayCar,filterSchema.parse({exteriorColor:'gray'})),'gray requirement accepts seller spelling grey');
+assert(matches({...grayCar,exteriorColor:'Nardo Gray Metallic'},filterSchema.parse({exteriorColor:'Nardo Grey'})),'named paint accepts equivalent gray/grey spelling');
+assert(!matches(grayCar,filterSchema.parse({exteriorColor:'silver'})),'distinct paint colors stay distinct');
+assert(!matches({...grayCar,exteriorColor:'Daytona Gray'},filterSchema.parse({exteriorColor:'Nardo Grey'})),'named paint requirements remain exact');

@@ -62,6 +62,8 @@ export function normalizeMarketplace(input:unknown):Listing|null{
  if(host==='carvana.com'&&!/^\/vehicle\/\d+\/?$/.test(path))return null;
  if(!['autotrader.com','carmax.com','carvana.com'].includes(host)&&(host==='facebook.com'?!/^\/marketplace\/item\/\d+\/?$/.test(path):host==='craigslist.org'? !(/^\/view\/d\/[^/]+\/[A-Za-z0-9_-]+\/?$/.test(path)||/^\/(?:[a-z0-9-]+\/)?(?:cto|ctd)\/d\/[^/]+\/\d+\.html$/.test(path)):!(/\/details\/\d+/.test(path)||/\/vehicledetail\//.test(path)||/\/listing\//.test(path)||/\/vehicledetails\//.test(path))))return null;
  const offer=record(Array.isArray(x.offers)?x.offers.length===1?x.offers[0]:null:x.offers);
+ // Only explicit unavailable states exclude inventory; missing status proves nothing.
+ if(/^(?:https?:\/\/schema\.org\/)?(?:SoldOut|OutOfStock|Discontinued)$/.test(string(offer.availability)))return null;
  const price=number(offer?.price),year=number(x.vehicleModelDate);
  if(price===null||price<=0||offer?.priceCurrency!=='USD')return null;
  const condition=string(x.itemCondition||offer.itemCondition).toLowerCase();

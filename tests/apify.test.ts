@@ -59,3 +59,18 @@ assert.equal(normalizeMarketplace({...raw,sellerType:undefined,offers:{...raw.of
 
 const optionalEquipment=normalizeMarketplace({...raw,description:'Heated seats available separately as an optional extra.'})!;
 assert.equal(rank([optionalEquipment],[],{...initialFilters,features:['heated seats']}).length,0,'marketplace description cannot turn optional equipment into an exact feature match');
+
+for(const status of ['SoldOut','OutOfStock','Discontinued'])for(const prefix of ['', 'http://schema.org/', 'https://schema.org/']){
+ const offer={...raw.offers,availability:prefix+status};
+ assert.equal(normalizeMarketplace({...raw,offers:offer}),null,`explicit unavailable offer is excluded: ${prefix+status}`);
+ assert.equal(normalizeMarketplace({...raw,offers:[offer]}),null,'singleton offer arrays enforce availability too');
+}
+for(const availability of [undefined,'InStock','http://schema.org/InStock','https://schema.org/InStock','Unknown','https://example.test/SoldOut']){
+ const offer={...raw.offers,...(availability===undefined?{}:{availability})};
+ for(const offers of [offer,[offer]]){
+  const availableOrUnknown=normalizeMarketplace({...raw,offers});
+  assert.ok(availableOrUnknown,'available or unrecognized availability preserves the listing');
+  assert.equal(availableOrUnknown.price,raw.offers.price);
+  assert(availableOrUnknown.concerns.some(note=>note.includes('confirm price, fitted equipment and availability')),'normalizing a listing does not claim confirmed stock');
+ }
+}

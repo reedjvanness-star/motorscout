@@ -18,7 +18,7 @@ export function driveType(s:unknown){const v=clean(s);return /\bawd\b|all wheel/
 export function cabStyle(s:unknown){const v=clean(s);return /crew|supercrew|crewmax/.test(v)?'crew':/extended|supercab|double cab|king cab|access cab/.test(v)?'extended':/regular|single cab/.test(v)?'regular':''}
 export function fuelType(s:unknown){const v=clean(s);return /hybrid|electric.*(?:gas|unleaded)/.test(v)?'hybrid':/diesel/.test(v)?'diesel':/electric|\bbev\b/.test(v)?'electric':/gas|unleaded|petrol/.test(v)?'gasoline':''}
 export function transmissionType(s:unknown){const v=clean(s);return /automatic|cvt|dual clutch|automated manual/.test(v)?'automatic':/manual/.test(v)?'manual':''}
-export function colorMatches(actual:unknown,wanted:string){const v=clean(actual),w=clean(wanted);return !!v&&!!w&&(v===w||(' '+v+' ').includes(' '+w+' '))}
+export function colorMatches(actual:unknown,wanted:string){const v=clean(actual).replace(/\bgrey\b/g,'gray'),w=clean(wanted).replace(/\bgrey\b/g,'gray');return !!v&&!!w&&(v===w||(' '+v+' ').includes(' '+w+' '))}
 const featurePatterns:Record<string,RegExp>={
  'heated seats':/heated (?:front |rear |front and rear )?seats/,'cooled seats':/(?:cooled|ventilated) (?:front )?seats/,'leather seats':/leather (?:trimmed |appointed )?(?:seats|upholstery)/,
  sunroof:/sunroof|moonroof|sun moonroof/,navigation:/navigation/,'backup camera':/back ?up camera|rear ?view camera|rear vision camera/,'blind spot monitor':/blind spot (?:monitor|detection|warning)/,
