@@ -3,7 +3,7 @@ import {localLocationCommand} from '@/lib/location-command';
 import {localScoutCommand,loadedScoutRefinement} from '@/lib/local-scout-command';
 import {withMarketplaceAccess} from '@/lib/marketplace-access';
 import {prepareChatComparison} from '@/lib/chat-comparison';
-import {workspaceCars,toggleComparison} from '@/lib/shortlist';
+import {workspaceCars,toggleComparison,collectedCarCount} from '@/lib/shortlist';
 import {alertSnapshot,saveAlert,checkAlert,emailReady} from '@/lib/alerts';
 import {alertSearchKey} from '@/lib/alert-matches';
 import {resolveSearchVehicle} from '@/lib/catalog-server';
@@ -23,7 +23,7 @@ if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length
 if(parsed.question)reply(parsed.question);
 else if(parsed.action==='refine'){
  refineWorkspace(w,filterSchema.parse(parsed.filters));
- reply(`Filtered your collection: ${w.listings.length} match out of ${w.collected?.length??w.listings.length} collected cars. No paid AI call or new marketplace search was used. Say “show all collected cars” to restore the original pool, or use Show matching cars for fresh inventory.`,w.listings.slice(0,12).map(car=>car.id));
+ reply(`Filtered your collection: ${w.listings.length} match out of ${collectedCarCount(w)} collected cars. No paid AI call or new marketplace search was used. Say “show all collected cars” to restore the original pool, or use Show matching cars for fresh inventory.`,w.listings.slice(0,12).map(car=>car.id));
 }
 else if(parsed.action==='compare')w.messages.push({role:'assistant',...prepareChatComparison(w,a.text),at:Date.now()});
 else if(parsed.action==='save')reply('Use Save on a recommendation to keep it in Saved cars. I won’t guess which car you meant.');
@@ -98,7 +98,7 @@ if(search){
   const succeeded=result.sources.some(s=>s.status==='searched'&&s.inspected!==undefined);
   if(!continuing)w.searchId=crypto.randomUUID();
   const keepLoaded=continuing||a.action==='chat'||a.action==='confirm';
-  if(succeeded||!continuing){const retained=keepLoaded?(w.collected??w.listings):[];collectWorkspace(w,[...retained,...result.listings],!continuing);w.batch=continuing?(w.batch??1)+1:1;w.searchedAt=result.checkedAt;}
+  if(succeeded||!continuing){const retained=keepLoaded?(w.collected??w.listings):[];collectWorkspace(w,[...retained,...(result.records??result.listings)],!continuing);w.batch=continuing?(w.batch??1)+1:1;w.searchedAt=result.checkedAt;}
   w.sources=continuing?mergeSources(w.sources,result.sources):result.sources;w.nextCursor=result.nextCursor;
   const message=access.apify&&!access.marketcheck&&!access.autodev?'Your requirements are ready. Searching the connected marketplaces next; results may take a few minutes.':!succeeded?'Some inventory sources could not be checked. Your collected cars remain available. Open Sources for details.':`Found ${w.listings.length} matching cars across the inventory checked so far. ${healthyCursor(w.nextCursor,w.sources)?'More inventory pages are available.':'All currently accessible pages for this search have been checked.'} ${w.listings.length<5?'Fewer than five exact matches have been found so far; your requirements have not been relaxed. ':''}Your requested requirements are shown beside the results. Seller prices and equipment still need confirmation.`;
   if(continuing&&w.messages.at(-1)?.role==='assistant')w.messages[w.messages.length-1]={role:'assistant',text:message,ids:w.listings.slice(0,12).map(r=>r.id),at:Date.now()};

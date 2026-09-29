@@ -36,3 +36,16 @@ const availableComps=known.slice(1,5);
 const unavailableComp={...known[5],priceReview:{status:'unavailable' as const,checkedAt:new Date().toISOString(),reportedPrice:known[5].price,note:'The seller reports this listing unavailable.'}};
 assert.equal(rank([target],[...availableComps,unavailableComp],f)[0].median,null,'an unavailable listing cannot supply the fifth comparable even without a price warning');
 assert.equal(rank([target],[...availableComps,known[5]],f)[0].median,31500,'five available condition-matched listings still support a median');
+
+const oldOffer={...base,price:30000,checkedAt:'2026-09-27T00:00:00Z'};
+const freshOffer={...base,price:34000,checkedAt:'2026-09-28T00:00:00Z'};
+for(const rows of [[oldOffer,freshOffer],[freshOffer,oldOffer]]){
+ const refreshed=deduplicate(rows)[0];
+ assert.equal(refreshed.price,34000,'freshness for the same source URL precedes price sorting');
+ assert.equal(refreshed.offers![0].price,34000);
+}
+assert.equal(deduplicate([freshOffer,{...freshOffer,price:35000}])[0].price,35000,'incoming same-time refresh wins');
+const composite={...oldOffer,offers:[{source:'alternate',url:'https://alternate.example/car',price:31000,fees:null,checkedAt:oldOffer.checkedAt}]};
+const alternate={...freshOffer,id:'alternate',source:'alternate',url:'https://alternate.example/car',price:36000};
+assert.equal(deduplicate([composite,alternate])[0].offers!.find(offer=>offer.url===alternate.url)?.price,36000,'fresh alternate offer beats a cheaper composite summary');
+assert.equal(deduplicate([{...freshOffer,offers:[{source:base.source,url:base.url,price:100,fees:null,checkedAt:freshOffer.checkedAt}]}])[0].offers![0].price,34000,'primary offer always reflects the full current record');

@@ -64,3 +64,37 @@ collectWorkspace(pool,[{...blue,price:42000}]);assert.equal(pool.collected!.find
 const persisted=await decodeWorkspace(await encodeWorkspace(pool));assert.equal(persisted.collected.length,2);
 pool.filters=filterSchema.parse({make:'Audi'});collectWorkspace(pool,[],true);assert.equal(pool.collected!.length,0);assert.equal(pool.poolFilters!.make,'Audi','fresh searches reset pool scope');
 console.log('PASS: reversible local refinements, price updates, pool bounds, persistence and fresh-search isolation');
+
+// Retain alternate full records through VIN deduplication and subsequent refreshes.
+const duplicatePool=blankWorkspace();duplicatePool.filters=f;
+const a={...car(200),price:30000,checkedAt:'2026-09-28T00:00:00Z',photo:'https://images.example/a.jpg',photos:['https://images.example/a.jpg']};
+const b={...a,id:'source-b',url:'https://other.example/car/200',source:'other.example',price:31000,photo:'https://images.example/b.jpg',photos:['https://images.example/b.jpg'],photosSourceUrl:'https://other.example/car/200'};
+collectWorkspace(duplicatePool,[a,b],true);
+assert.equal(duplicatePool.collected!.length,2,'complete source records survive collecting one VIN');
+assert.equal(duplicatePool.listings.length,1);
+collectWorkspace(duplicatePool,[{...b,price:32000,checkedAt:'2026-09-29T00:00:00Z'}]);
+assert.equal(duplicatePool.listings[0].offers!.find(offer=>offer.url===b.url)?.price,32000,'secondary source refresh replaces its stale offer');
+collectWorkspace(duplicatePool,[{...a,price:34000,checkedAt:'2026-09-29T00:00:00Z'}]);
+assert.equal(duplicatePool.listings[0].id,b.id,'a primary price increase can select the retained cheaper alternate');
+assert.equal(duplicatePool.listings[0].price,32000);
+assert.deepEqual(duplicatePool.listings[0].photos,b.photos,'alternate selection uses that source gallery exclusively');
+assert.equal(duplicatePool.listings[0].photosSourceUrl,b.url);
+assert.equal(duplicatePool.listings[0].offers!.find(offer=>offer.url===a.url)?.price,34000);
+collectWorkspace(duplicatePool,[{...b,price:35000,checkedAt:'2026-09-29T00:00:00Z'}]);
+assert.equal(duplicatePool.listings[0].id,a.id,'equal timestamp incoming refresh takes precedence');
+assert.deepEqual(duplicatePool.listings[0].photos,a.photos);
+collectWorkspace(duplicatePool,[b]);
+assert.equal(duplicatePool.listings[0].offers!.find(offer=>offer.url===b.url)?.price,35000,'older source snapshots cannot restore stale low prices');
+const duplicateRoundTrip=await decodeWorkspace(await encodeWorkspace(duplicatePool));
+assert.equal(duplicateRoundTrip.collected.length,2,'complete alternate records persist');
+
+const legacy=mergeSearch([], [a,b],f);
+const legacyUpdated=mergeSearch(legacy,[{...a,price:34000,checkedAt:'2026-09-29T00:00:00Z'}],f);
+assert.deepEqual(legacyUpdated[0].offers!.map(offer=>offer.url),[a.url],'legacy primary replacement cannot pretend its lost alternate record is still retained');
+assert.deepEqual(legacyUpdated[0].photos,a.photos);
+const legacySecondaryUpdate=mergeSearch(legacy,[{...b,price:50000,checkedAt:'2026-09-29T00:00:00Z'}],{...f,maxPrice:40000});
+assert(!legacySecondaryUpdate[0].offers!.some(offer=>offer.url===b.url),'a refreshed out-of-budget offer cannot survive inside an older composite');
+const capped=blankWorkspace();capped.filters=f;
+collectWorkspace(capped,Array.from({length:3002},(_,index)=>({...a,id:'offer-'+index,url:`https://seller.example/${index}`})),true);
+assert.equal(capped.collected!.length,3000,'raw records remain bounded by the existing storage cap');
+assert.equal(capped.listings.length,1,'the raw-record cap does not disable vehicle deduplication');

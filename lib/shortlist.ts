@@ -1,4 +1,6 @@
-import type {Listing,Workspace} from './domain';
+import {listingKey,type Listing,type Workspace} from './domain';
+
+export function collectedCarCount(w:Pick<Workspace,'collected'|'listings'>){return new Set((w.collected??w.listings).map(listingKey)).size;}
 
 export function workspaceCars(w:Workspace){
  const cars=new Map<string,Listing>();

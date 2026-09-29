@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {blankWorkspace,type Listing} from '../lib/domain';
-import {restoreComparisons,toggleComparison,workspaceCars} from '../lib/shortlist';
+import {restoreComparisons,toggleComparison,workspaceCars,collectedCarCount} from '../lib/shortlist';
 const car=(id:string)=>({id,title:id,price:30000} as Listing);
 const w=blankWorkspace();w.listings=[car('a'),car('b'),car('c'),car('d')];
 toggleComparison(w,w.listings[0]);
@@ -19,3 +19,9 @@ old.listings=[{...car('legacy'),price:28000}];restoreComparisons(old);
 assert.equal(old.comparisonCars?.[0].price,28000,'fresh results update retained comparison');
 old.filters.shippingAllowance=1000;assert.equal(workspaceCars(old)[0].total,29000,'retained cars use the current shipping reserve, not a stale subtotal');
 console.log('PASS: independent saved/compared lists, retention, migration, limits and updated car details');
+
+const firstOffer={...car('offer-a'),vin:'12345678901234567',url:'https://seller-a.example/car'};
+const secondOffer={...firstOffer,id:'offer-b',url:'https://seller-b.example/car'};
+assert.equal(collectedCarCount({listings:[firstOffer],collected:[firstOffer,secondOffer]}),1,'two source offers count as one collected car');
+assert.equal(collectedCarCount({listings:[firstOffer],collected:[firstOffer,secondOffer,{...secondOffer,id:'another',vin:'76543210987654321'}]}),2,'hidden second vehicle still enables restore collection');
+assert.equal(collectedCarCount({listings:[firstOffer]}),1,'legacy collections count visible cars');

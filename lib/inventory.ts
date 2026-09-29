@@ -4,9 +4,10 @@ import {retailers,retailerInventoryUrl,normalizeRetailer} from './retailers';
 import {applyPriceReview,checkListingPrice,canCheckListingPrice} from './price-review';
 import {autoDevUrl, normalizeAutoDev} from './autodev';
 import {marketcheckUrl, normalizeMarketcheck, MARKETCHECK_PAGE_SIZE,autotraderMarketcheckUrl,normalizeAutotraderMarketcheck} from './marketcheck';
-import {firstCursor, rank, type Filters, type Listing, type SearchCursor, type Source} from './domain';
+import {firstCursor, rank, matches, type Filters, type Listing, type SearchCursor, type Source} from './domain';
 
 export type InventoryKeys = {marketcheck?:string;autodev?:string};
+export type InventoryResult={listings:Listing[];records?:Listing[];sources:Source[];checkedAt:string;nextCursor:SearchCursor|null};
 class ProviderFailure extends Error { constructor(readonly status:number){super('Provider request failed')} }
 function failureDetail(error:unknown){
   if(error instanceof ProviderFailure){
@@ -47,7 +48,7 @@ export function nextAutoPosition(input:unknown, current:string, count:number):st
   return /^\d+$/.test(current)&&Number(current)<50 ? String(Number(current)+1) : null;
 }
 
-export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:SearchCursor=firstCursor(), request:typeof fetch=fetch) {
+export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:SearchCursor=firstCursor(), request:typeof fetch=fetch):Promise<InventoryResult> {
   const sources=inventoryStatus(keys),next:SearchCursor={dealer:null,private:null,auction:null,autodev:null,autotrader:null,retailers:null};
   const groups:Listing[][]=[[],[],[],[],[],[]];
   async function market(privateSeller:boolean, auction=false) {
@@ -140,5 +141,5 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
   }
   if(f.zip)for(const source of sources)if(source.status==='searched'&&source.inspected!==undefined)source.detail+=` Provider location filter: within ${f.radiusMiles} miles of ZIP ${f.zip}.`;
   // Keep every eligible car in a fetched batch; display pagination happens locally.
-  return {listings:rank(rows,rows,f,rows.length),sources,checkedAt:new Date().toISOString(),nextCursor:Object.values(next).some(v=>v!==null)?next:null};
+  return {listings:rank(rows,rows,f,rows.length),records:rows.filter(row=>matches(row,f)),sources,checkedAt:new Date().toISOString(),nextCursor:Object.values(next).some(v=>v!==null)?next:null};
 }

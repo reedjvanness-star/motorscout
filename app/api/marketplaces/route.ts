@@ -1,6 +1,6 @@
 import {record} from '@/lib/unknown-data';
 import {locateListings} from '@/lib/zip-location';
-import {identity,db,readWorkspace,writeWorkspace,boundedJson,failure} from '@/lib/server';
+import {identity,db,readWorkspace,readWorkspaceSnapshot,commitMarketplaceImport,boundedJson,failure} from '@/lib/server';
 import {reserveBetaSearch} from '@/lib/shared-marketplace';
 import {providerKey,connectionStatus} from '@/lib/connections';
 import {apifyRequest,marketplaceInput,normalizeMarketplace,marketplaceSources,MARKETPLACE_RUN_CAP,ACTOR,FACEBOOK_ACTOR,facebookInput,normalizeFacebook,retailerMarketplaceInput,retailerMarketplaceSources} from '@/lib/apify';
@@ -24,7 +24,7 @@ export async function POST(req:Request){try{
  const actor=facebook?FACEBOOK_ACTOR:ACTOR;
  const jobId=id+(facebook?':facebook-job':retail?':retail-marketplace-job':':marketplace-job');
  const stored=await db().prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(jobId).first<{payload:string}>();
- let job:Job|undefined=stored?JSON.parse(stored.payload):undefined;
+ const job:Job|undefined=stored?JSON.parse(stored.payload):undefined;
  const hasMore=(j:Job)=>!shared&&!facebook&&!retail&&((j.batch??0)===0||marketplaceRegionBatch('automotive',w.filters.state,(j.batch??0)-1).hasMore);
  if(a.action==='start'){
   const advance=job?.searchId===w.searchId&&job.state==='IMPORTED'&&a.advance===true&&hasMore(job);
@@ -46,7 +46,7 @@ export async function POST(req:Request){try{
     next.runId=data.id;next.state=data.status;
    }
   }catch(e){next.state='FAILED';await db().prepare('UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?').bind(JSON.stringify(next),Date.now(),jobId,startingPayload).run();throw e;}
-  await db().prepare("UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND json_extract(payload,'$.searchId')=?").bind(JSON.stringify(next),Date.now(),jobId,w.searchId).run();
+  await db().prepare("UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?").bind(JSON.stringify(next),Date.now(),jobId,startingPayload).run();
   return Response.json({done:false,state:next.state});
  }
  if(a.action!=='poll')throw Error('Unknown marketplace action.');
@@ -59,13 +59,21 @@ export async function POST(req:Request){try{
  if(!Array.isArray(raw))throw Error('Invalid marketplace inventory response.');
  const unlocated=raw.map(facebook?normalizeFacebook:normalizeMarketplace).filter((r:Listing|null):r is Listing=>r!==null).map(row=>({...row,checkedAt:new Date(job!.startedAt).toISOString()}));
  const rows=await locateListings(unlocated,w.filters);
- const latest=await readWorkspace(id);if(latest.searchId!==w.searchId)throw Error('Your search changed while marketplaces were loading.');
+ for(let attempt=0;attempt<4;attempt++){
+ const snapshot=await readWorkspaceSnapshot(id),latest=snapshot.workspace;
+ if(latest.searchId!==w.searchId)throw Error('Your search changed while marketplaces were loading.');
+ const current=await db().prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(jobId).first<{payload:string}>();
+ if(!current||snapshot.payload===null)throw Error('Marketplace search changed. Check the latest search.');
+ if(current.payload!==stored!.payload){
+  const currentJob:Job=JSON.parse(current.payload);
+  if(currentJob.searchId!==job.searchId||currentJob.runId!==job.runId||currentJob.batch!==job.batch)throw Error('Marketplace search changed. Check the latest search.');
+  return Response.json({done:currentJob.state==='IMPORTED',state:currentJob.state,hasMore:hasMore(currentJob)});
+ }
  collectWorkspace(latest,rows);
  const sources:Source[]=retail?retailerMarketplaceSources(rows,done,latest.sources):facebook?[{name:'Facebook Marketplace',status:rows.length?'searched':done?'error':'ready',count:rows.length,inspected:rows.length,detail:`Local search centers: ${marketplaceRegionBatch('facebook',latest.filters.state).regions.join(', ')}. Partial coverage only. ${rows.length} usable vehicles returned. Your exact filters are applied before display.`}]:marketplaceSources(rows,done,latest.filters.state,job.batch??0);if(w.filters.zip)for(const source of sources)source.detail+=` Only vehicles with verifiable locations within ${w.filters.radiusMiles} miles of ${w.filters.zip} appear. Listings without location evidence are excluded.`;latest.sources=[...latest.sources.filter(s=>!sources.some(n=>n.name===s.name)),...sources];
  if(done){const n=latest.listings.length;latest.messages.push({role:'assistant',at:Date.now(),text:`Marketplace search finished. ${n} cars match your current requirements.${n<5?' Fewer than five exact matches were found in the inventory checked; your specifications have not been relaxed.':''}`,ids:latest.listings.slice(0,12).map(r=>r.id)});}
- // Repeated completed polls must not duplicate messages.
- if(job.state!== 'IMPORTED')await writeWorkspace(id,latest);
- job={...job,state:done?'IMPORTED':data.status,successful:data.status==='SUCCEEDED'};
- await db().prepare("UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND json_extract(payload,'$.searchId')=?").bind(JSON.stringify(job),Date.now(),jobId,w.searchId).run();
- return Response.json({done,state:data.status,count:rows.length,hasMore:done&&hasMore(job)});
+ const nextJob={...job,state:done?'IMPORTED':data.status,successful:data.status==='SUCCEEDED'};
+ if(await commitMarketplaceImport(id,latest,snapshot.payload,jobId,current.payload,nextJob))return Response.json({done,state:data.status,count:rows.length,hasMore:done&&hasMore(nextJob)});
+ }
+ throw Error('Your workspace changed while marketplace results were being imported. Check more marketplaces to retry.');
 }catch(e){return failure(e)}}

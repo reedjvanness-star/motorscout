@@ -90,3 +90,23 @@ const redirected=await searchInventory(initialFilters,{marketcheck:'test',autode
 });
 assert.equal(redirected.listings.length,0);
 assert(redirected.sources.slice(0,4).every(s=>s.status==='error'&&s.detail.includes('HTTP 302')));
+
+// A simultaneous cross-provider VIN duplicate must reach collection as full records.
+const {collectWorkspace}=await import('../lib/search-session');
+const {blankWorkspace}=await import('../lib/domain');
+const commonVin='4S4GUHF63S3720418';
+const simultaneous=await searchInventory(f,{marketcheck:'test',autodev:'test'},{dealer:0,private:null,auction:null,autodev:'1',autotrader:null,retailers:null},async input=>{
+ const url=new URL(String(input));
+ if(url.host==='api.auto.dev')return Response.json({data:[{vehicle:{vin:commonVin,year:2022,make:'BMW',model:'3 Series',trim:'M340i',drivetrain:'AWD'},retailListing:{used:true,price:32000,vdp:'https://auto.example/same-vin',miles:39000,state:'CO',primaryImage:'https://images.example/auto.jpg'}}],links:{next:null}});
+ return Response.json({listings:[record(701,{vin:commonVin,price:30000,media:{photo_links:['https://images.example/market.jpg']}}),record(702,{price:60000})],num_found:2});
+});
+assert.equal(simultaneous.listings.length,1,'display still shows one matching vehicle');
+assert.equal(simultaneous.records!.length,2,'full matching alternate records survive inventory-stage deduplication');
+assert(!simultaneous.records!.some(row=>row.price===60000),'unmatched raw data is not retained');
+const simultaneousPool=blankWorkspace();simultaneousPool.filters=f;
+collectWorkspace(simultaneousPool,simultaneous.records??simultaneous.listings,true);
+const primary=simultaneous.records!.find(row=>row.id.startsWith('marketcheck:'))!;
+collectWorkspace(simultaneousPool,[{...primary,price:34000,checkedAt:new Date(Date.parse(primary.checkedAt)+1000).toISOString()}]);
+assert.equal(simultaneousPool.listings[0].source,'auto.example');
+assert.equal(simultaneousPool.listings[0].price,32000);
+assert.deepEqual(simultaneousPool.listings[0].photos,['https://images.example/auto.jpg'],'retained alternate supplies its own complete photo provenance');

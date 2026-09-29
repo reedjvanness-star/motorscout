@@ -1,4 +1,4 @@
-import {rank,type Listing,type Source,type SearchCursor,type Filters,type Workspace} from './domain';
+import {rank,matches,type Listing,type Source,type SearchCursor,type Filters,type Workspace} from './domain';
 import {applyPriceReview} from './price-review';
 
 // Collect a useful pool automatically; still bounded by provider quotas and exhaustion.
@@ -14,13 +14,27 @@ export function healthyCursor(cursor:SearchCursor|null|undefined,sources:Source[
  }
  return Object.values(next).some(v=>v!==null)?next:null;
 }
+// Keep complete source records so a later price update can change the winning offer.
+// Legacy composite rows retain only the alternate offer metadata actually stored.
+export function mergeCollected(previous:Listing[],incoming:Listing[],filters:Filters){
+ const rows=new Map<string,Listing>(),urls=new Map<string,string>();
+ const checked=(row:Listing)=>Number.isFinite(Date.parse(row.checkedAt))?Date.parse(row.checkedAt):0;
+ for(const row of [...previous,...incoming]){
+  const previousId=rows.has(row.id)?row.id:urls.get(row.url);
+  const old=previousId===undefined?undefined:rows.get(previousId);
+  if(old&&checked(old)>checked(row))continue;
+  if(old){rows.delete(old.id);urls.delete(old.url)}
+  rows.set(row.id,row);urls.set(row.url,row.id);
+ }
+ const knownUrls=new Set([...rows.values()].map(row=>row.url));
+ return [...rows.values()].map(row=>applyPriceReview({...row,
+  // A full refreshed record supersedes any embedded legacy offer for that URL,
+  // including updates that no longer satisfy the collection's hard filters.
+  offers:row.offers?.filter(offer=>!knownUrls.has(offer.url)),
+ })).filter(row=>matches(row,filters));
+}
 export function mergeSearch(previous:Listing[],incoming:Listing[],filters:Filters){
- // Updated offers replace earlier copies; different source offers remain available.
- const rows=new Map(previous.map(r=>[r.id,r]));
- incoming.forEach(r=>rows.set(r.id,r));
- // Marketplace imports and previously collected offers need the same price
- // validation as live inventory before filtering or announcing match counts.
- const combined=[...rows.values()].map(row=>applyPriceReview(row));
+ const combined=mergeCollected(previous,incoming,filters);
  return rank(combined,combined,filters,combined.length);
 }
 export function mergeSources(previous:Source[],incoming:Source[]):Source[]{
@@ -40,7 +54,7 @@ export function mergeSources(previous:Source[],incoming:Source[]):Source[]{
 // Refinements keep the original collection so a shopper can change their mind.
 export function collectWorkspace(w:Workspace,incoming:Listing[],reset=false){
  if(reset||!w.poolFilters)w.poolFilters={...w.filters};
- w.collected=mergeSearch(reset?[]:(w.collected??w.listings),incoming,w.poolFilters).slice(0,3000);
+ w.collected=mergeCollected(reset?[]:(w.collected??w.listings),incoming,w.poolFilters).slice(0,3000);
  w.listings=mergeSearch(w.collected,[],w.filters);
 }
 export function refineWorkspace(w:Workspace,filters:Filters){

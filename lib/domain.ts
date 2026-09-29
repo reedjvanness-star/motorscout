@@ -35,10 +35,17 @@ export function deduplicate(rows:Listing[]){
   const groups=new Map<string,Listing[]>();
   for(const r of rows){const key=listingKey(r);groups.set(key,[...(groups.get(key)??[]),r])}
   return [...groups.values()].map(group=>{
-    const ordered=[...group].sort((a,b)=>Number(!!a.priceWarning)-Number(!!b.priceWarning)||(a.price+(a.fees??0))-(b.price+(b.fees??0))||Date.parse(b.checkedAt)-Date.parse(a.checkedAt));
+    const checked=(offer:ListingOffer)=>Number.isFinite(Date.parse(offer.checkedAt))?Date.parse(offer.checkedAt):0;
+    const current=new Map<string,Listing>();
+    for(const row of group){const old=current.get(row.url);if(!old||checked(row)>=checked(old))current.set(row.url,row)}
+    const ordered=[...current.values()].sort((a,b)=>Number(!!a.priceWarning)-Number(!!b.priceWarning)||(a.price+(a.fees??0))-(b.price+(b.fees??0))||checked(b)-checked(a));
     const offers=new Map<string,ListingOffer>();
-    for(const row of ordered)for(const offer of row.offers??[{source:row.source,url:row.url,price:row.price,fees:row.fees,checkedAt:row.checkedAt,priceWarning:row.priceWarning}])if(!offers.has(offer.url))offers.set(offer.url,offer);
-    return {...ordered[0],photos:photoUrls(...ordered.filter(row=>row.url===ordered[0].url&&row.photosSourceUrl===row.url).flatMap(row=>[row.photo,row.photos])),photosSourceUrl:ordered[0].url,offers:[...offers.values()]};
+    // Input order resolves timestamp ties so an incoming refresh replaces old data.
+    // Always rebuild the primary offer from its actual record, not a cached summary.
+    for(const row of group)for(const offer of [...(row.offers??[]).filter(offer=>offer.url!==row.url),{source:row.source,url:row.url,price:row.price,fees:row.fees,checkedAt:row.checkedAt,priceWarning:row.priceWarning}]){
+      const old=offers.get(offer.url);if(!old||checked(offer)>=checked(old))offers.set(offer.url,offer);
+    }
+    return {...ordered[0],photos:photoUrls(...group.filter(row=>row.url===ordered[0].url&&row.photosSourceUrl===row.url).flatMap(row=>[row.photo,row.photos])),photosSourceUrl:ordered[0].url,offers:[...offers.values()]};
   });
 }
 const eq=(a:string,b:string)=>vehicleNameKey(a)===vehicleNameKey(b);
