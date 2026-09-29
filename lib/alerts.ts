@@ -20,16 +20,22 @@ export async function alertSnapshot(userId:string){
  return {alerts:rows.results,notifications:notices.results,emailReady:emailReady(),schedulerReady:!!(keys.marketcheck||keys.autodev)&&await schedulerReady()};
 }
 export async function saveAlert(userId:string,filters:Filters,baseline:Listing[],enabled:boolean,email:string|null,emailEnabled:boolean){
+ const canonical=alertSearchKey(filters);
+ const findExisting=async()=>{
+  const existing=await db().prepare('SELECT id,filters FROM alerts WHERE user_id=?').bind(userId).all<{id:string;filters:string}>();
+  return existing.results.find(a=>alertSearchKey(filterSchema.parse(JSON.parse(a.filters)))===canonical)?.id;
+ };
+ const existing=await findExisting();if(existing)return existing;
  if(emailEnabled&&(!emailReady()||!email))throw Error('Email alerts are not connected yet. You can save this search for in-app updates.');
- const existing=await db().prepare('SELECT id,filters FROM alerts WHERE user_id=?').bind(userId).all<{id:string;filters:string}>();
- if(existing.results.some(a=>alertSearchKey(filterSchema.parse(JSON.parse(a.filters)))===alertSearchKey(filters)))throw Error('This search is already saved. Manage it under Saved searches.');
  const id=crypto.randomUUID(),now=Date.now();
+ // Store the canonical filter JSON so racing saves with different display
+ // limits share the SQL duplicate guard. Legacy rows are matched above.
  const result=await db().batch([
-  db().prepare('INSERT INTO alerts(id,user_id,filters,enabled,next_run) SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM alerts WHERE user_id=?)<10 AND NOT EXISTS(SELECT 1 FROM alerts WHERE user_id=? AND filters=?)').bind(id,userId,JSON.stringify(filters),enabled?1:0,now,userId,userId,JSON.stringify(filters)),
+  db().prepare('INSERT INTO alerts(id,user_id,filters,enabled,next_run) SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM alerts WHERE user_id=?)<10 AND NOT EXISTS(SELECT 1 FROM alerts WHERE user_id=? AND filters=?)').bind(id,userId,canonical,enabled?1:0,now,userId,userId,canonical),
   db().prepare('INSERT INTO alert_settings(alert_id,email,email_enabled,unsubscribe_token) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM alerts WHERE id=?)').bind(id,emailEnabled?email:null,emailEnabled?1:0,crypto.randomUUID(),id),
   db().prepare('INSERT OR IGNORE INTO alert_seen(alert_id,listing_key) SELECT ?,value FROM json_each(?) WHERE EXISTS(SELECT 1 FROM alerts WHERE id=?)').bind(id,JSON.stringify([...new Set(baseline.filter(c=>!c.priceWarning).map(listingKey))]),id),
  ]);
- if(!result[0].meta.changes)throw Error('This search is already saved, or your 10-search limit has been reached.');
+ if(!result[0].meta.changes){const concurrent=await findExisting();if(concurrent)return concurrent;throw Error('You can save up to 10 searches. Remove a saved search before adding another.');}
  return id;
 }
 // One bounded inventory batch per search per day; no scraper jobs or AI calls.

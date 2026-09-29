@@ -8,7 +8,7 @@ import {money,type Listing,type Filters} from '@/lib/domain';
 import type {WorkspaceAction} from '@/lib/client-contract';
 export type SavedAlert={id:string;filters:string;enabled:number;last_run:number|null;next_run:number;results:string|null;email_enabled:number|null;last_error:string|null};
 export type MatchNotification={id:string;alert_id:string;cars:string;created_at:number;read_at:number|null};
-export function AlertSignup({open,onOpenChange,labels,signedIn,scheduler,emailReady,busy,error,onSave}:{open:boolean;onOpenChange:(v:boolean)=>void;labels:string[];signedIn:boolean;scheduler:boolean;emailReady:boolean;busy:boolean;error?:string;onSave:(email:boolean)=>Promise<void>}){
+export function AlertSignup({open,onOpenChange,labels,signedIn,scheduler,emailReady,busy,error,alreadySaved=false,onViewSaved,onSave}:{open:boolean;onOpenChange:(v:boolean)=>void;labels:string[];signedIn:boolean;scheduler:boolean;emailReady:boolean;busy:boolean;error?:string;alreadySaved?:boolean;onViewSaved?:()=>void;onSave:(email:boolean)=>Promise<void>}){
  const [email,setEmail]=useState(false),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
  const pending=busy||saving;
  async function save(){
@@ -18,17 +18,17 @@ export function AlertSignup({open,onOpenChange,labels,signedIn,scheduler,emailRe
  }
  return <Sheet open={open} onOpenChange={onOpenChange}>
   <SheetContent className="filter-sheet alert-signup-sheet">
-   <SheetHeader><SheetTitle>Save this search</SheetTitle><SheetDescription>Keep these exact filters in Saved searches.</SheetDescription></SheetHeader>
+   <SheetHeader><SheetTitle>{alreadySaved?'Search saved':'Save this search'}</SheetTitle><SheetDescription>{alreadySaved?'These exact filters are already in Saved searches.':'Keep these exact filters in Saved searches.'}</SheetDescription></SheetHeader>
    <div className="sheet-body alert-signup">
     <div className="filter-chips">{labels.length?labels.map(t=><span className="filter-chip" key={t}>{t}</span>):<span className="helper">All used cars · no extra filters</span>}</div>
-    <p>{scheduler?'New matches from available connected inventory appear in your inbox.':'Save now and reuse these filters anytime. Automatic checks are not active yet.'}</p>
-    <label className="alert-toggle"><span>Email new matches</span><Switch checked={email&&emailReady} disabled={!emailReady||pending} onCheckedChange={setEmail}/></label>
-    {!emailReady&&<p className="helper">Email is not available yet. You can still save this search.</p>}
+    <p>{alreadySaved?'Open Saved searches to reuse these filters or manage this search.':scheduler?'New matches from available connected inventory appear in your inbox.':'Save now and reuse these filters anytime. Automatic checks are not active yet.'}</p>
+    {!alreadySaved&&<label className="alert-toggle"><span>Email new matches</span><Switch checked={email&&emailReady} disabled={!emailReady||pending} onCheckedChange={setEmail}/></label>}
+    {!alreadySaved&&!emailReady&&<p className="helper">Email is not available yet. You can still save this search.</p>}
     <p className="helper">Your filters stay unchanged. You can remove the saved search anytime.</p>
    </div>
    <SheetFooter className="alert-signup-footer">
     {(error||saveError)&&<p className="alert-signup-error" role="alert">{error||saveError}</p>}
-    {signedIn?<Button className="alert-save-button" disabled={pending} onClick={()=>void save()}>{pending?<LoaderCircle className="spin"/>:<Bell/>}{saving?'Saving…':'Save search'}</Button>:<a className="alert-signin" href="/signin-with-chatgpt?return_to=/%3Ftab%3Dalerts" target="_top">Sign in to save search</a>}
+    {alreadySaved&&onViewSaved?<Button className="alert-save-button" onClick={onViewSaved}><Check/>View saved search</Button>:signedIn?<Button className="alert-save-button" disabled={pending} onClick={()=>void save()}>{pending?<LoaderCircle className="spin"/>:<Bell/>}{saving?'Saving…':'Save search'}</Button>:<a className="alert-signin" href="/signin-with-chatgpt?return_to=/%3Ftab%3Dalerts" target="_top">Sign in to save search</a>}
    </SheetFooter>
   </SheetContent>
  </Sheet>;

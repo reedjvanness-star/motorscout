@@ -31,7 +31,9 @@ class Statement{
  async all(){return {results:sqlite.prepare(this.sql).all(...this.values)}}
  async run(){const r=sqlite.prepare(this.sql).run(...this.values);return {meta:{changes:Number(r.changes)}}}
 }
+let beforeBatch:(()=>Promise<void>)|undefined;
 const database={prepare:(sql:string)=>new Statement(sql),batch:async(statements:Statement[])=>{
+ const hook=beforeBatch;beforeBatch=undefined;if(hook)await hook();
  sqlite.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());sqlite.exec('COMMIT');return out}catch(e){sqlite.exec('ROLLBACK');throw e}
 }};
 let calls=0,inventory=[car],failure=false;
@@ -49,7 +51,20 @@ try{
  }}]});
  const api=await import(pathToFileURL(file).href);
  const id=await api.saveAlert('alice',filters,[],true,null,false);
- await assert.rejects(()=>api.saveAlert('alice',filters,[],true,null,false),/already saved/);
+ assert.equal(await api.saveAlert('alice',filters,[],true,null,false),id,'saving an existing search succeeds');
+ const unchanged=()=>({alert:sqlite.prepare('SELECT * FROM alerts WHERE id=?').get(id),settings:sqlite.prepare('SELECT * FROM alert_settings WHERE alert_id=?').get(id),seen:sqlite.prepare('SELECT * FROM alert_seen WHERE alert_id=?').all(id)});
+ const original=unchanged();
+ assert.equal(await api.saveAlert('alice',{...filters,limit:50},[car],false,'different@example.test',true),id,'equivalent display limit uses the saved search without changing email preferences');
+ assert.deepEqual(unchanged(),original,'existing preferences, baseline and schedule remain unchanged');
+ const otherId=await api.saveAlert('bob',filters,[car],false,null,false);assert.notEqual(otherId,id,'another account gets its own saved search');
+ for(let i=0;i<9;i++)await api.saveAlert('alice',{...filters,maxPrice:60000+i},[],false,null,false);
+ assert.equal(await api.saveAlert('alice',{...filters,limit:30},[car],false,null,false),id,'already-saved requests succeed even at capacity');
+ await assert.rejects(()=>api.saveAlert('alice',{...filters,maxPrice:90000},[],true,null,false),/up to 10 searches/);
+ let raceId='';beforeBatch=async()=>{raceId=await api.saveAlert('race',{...filters,limit:50},[car],false,null,false)};
+ assert.equal(await api.saveAlert('race',filters,[],true,null,false),raceId,'equivalent concurrent insert returns the winning saved search');
+ assert.equal((sqlite.prepare('SELECT count(*) AS count FROM alerts WHERE user_id=?').get('race') as {count:number}).count,1);
+ assert.equal((sqlite.prepare('SELECT enabled FROM alerts WHERE id=?').get(raceId) as {enabled:number}).enabled,0);
+ assert.equal((sqlite.prepare('SELECT count(*) AS count FROM alert_seen WHERE alert_id=?').get(raceId) as {count:number}).count,1,'losing save cannot change baseline');
  assert.equal((await api.checkAlert(id,'bob')).checked,false,'other account cannot run/read a search');
  assert.equal(calls,0);
  const results=await Promise.all([api.checkAlert(id),api.checkAlert(id)]);
