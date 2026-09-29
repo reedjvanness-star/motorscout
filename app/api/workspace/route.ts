@@ -1,3 +1,4 @@
+import {retainedWorkspaceCars} from '@/lib/chat-results';
 import {rememberSearch,restorePreviousSearch} from '@/lib/search-history';
 import {resolveZip} from '@/lib/zip-location';
 import {localLocationCommand} from '@/lib/location-command';
@@ -43,8 +44,8 @@ else if(a.action==='reviewPrices'){
  w.listings=w.listings.map(r=>updated.get(r.id)??r);w.collected=w.collected?.map(r=>updated.get(r.id)??r);w.saved=w.saved.map(r=>updated.get(r.id)??r);w.comparisonCars=w.comparisonCars?.map(r=>updated.get(r.id)??r);
 }
 else if(a.action==='cancel'){w.pending=null;reply('Kept your original requirements.');}
-else if(a.action==='save'){const row=w.listings.find(r=>r.id===a.id)||w.saved.find(r=>r.id===a.id)||w.comparisonCars?.find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!row)throw Error('This listing is no longer in your results.');if(w.saved.some(r=>r.id===row.id)){w.saved=w.saved.filter(r=>r.id!==row.id)}else{if(w.saved.length>=100)throw Error('You can save up to 100 cars.');w.saved.push(row)}}
-else if(a.action==='compare'){const candidate=workspaceCars(w).find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!candidate)throw Error('Listing not found.');toggleComparison(w,candidate)}
+else if(a.action==='save'){const row=retainedWorkspaceCars(w).find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!row)throw Error('This listing is no longer in your results.');if(w.saved.some(r=>r.id===row.id)){w.saved=w.saved.filter(r=>r.id!==row.id)}else{if(w.saved.length>=100)throw Error('You can save up to 100 cars.');w.saved.push(row)}}
+else if(a.action==='compare'){const candidate=retainedWorkspaceCars(w).find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!candidate)throw Error('Listing not found.');toggleComparison(w,candidate)}
 else if(a.action==='resetChat'){w.messages=[];w.pending=null;}
 else if(a.action==='restoreSearch'){restorePreviousSearch(w);}
 else if(a.action==='newSearch'){rememberSearch(w);w.filters={...initialFilters};w.messages=[];w.listings=[];w.collected=[];w.poolFilters=undefined;w.sources=[];w.pending=null;w.searchedAt=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;}

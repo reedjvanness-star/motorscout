@@ -47,5 +47,13 @@ try{
  await action('search',{filters:{make:'Audi'}});assert.equal(routeFixture.workspace.listings.length,0);assert(routeFixture.workspace.previousSearch);await action('restoreSearch');assert.deepEqual(routeFixture.workspace.listings,baseline.listings,'all-source failure keeps old cars recoverable');
  routeFixture.throws=true;const beforeFailure=structuredClone(routeFixture.workspace);await action('search',{filters:{make:'Ford'}},400);assert.deepEqual(routeFixture.workspace,beforeFailure,'thrown provider failure leaves current search intact');
  await action('loadSearch',{id:'saved-filter'});assert.equal(routeFixture.workspace.filters.make,'Toyota');await action('restoreSearch');assert.deepEqual(routeFixture.workspace.listings,baseline.listings);
+ const archived=blankWorkspace();archived.listings=[car('historical-only')];routeFixture.workspace.previousSearch=captureSearch(archived);
+ routeFixture.workspace.collected=[...(routeFixture.workspace.collected??[]),car('filtered-out')];
+ const beforeHistorical=routeFixture.providerCalls;
+ await action('save',{id:'marketcheck:historical-only'});assert(routeFixture.workspace.saved.some(row=>row.id==='marketcheck:historical-only'),'historical cards can be saved from their retained snapshot');
+ routeFixture.workspace.compare=[];routeFixture.workspace.comparisonCars=[];
+ await action('compare',{id:'marketcheck:historical-only'});assert.deepEqual(routeFixture.workspace.compare,['marketcheck:historical-only']);assert.equal(routeFixture.workspace.comparisonCars?.[0].id,'marketcheck:historical-only');
+ await action('save',{id:'marketcheck:filtered-out'});assert(routeFixture.workspace.saved.some(row=>row.id==='marketcheck:filtered-out'),'filtered-out collected cars remain actionable');
+ assert.equal(routeFixture.providerCalls,beforeHistorical,'historical actions make no inventory requests');
  console.log('PASS: route new-search, failed-search and saved-filter recovery without extra provider calls or allowance');
 }finally{delete fixtureGlobal.__historyFixture;await rm(dir,{recursive:true,force:true})}
