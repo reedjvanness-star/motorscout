@@ -20,13 +20,13 @@ export async function firstResults(filters:Filters,keys:InventoryKeys,search:typ
   else next[pending]=eligible?start[pending]??null:null;
   const index=result.sources.findIndex(source=>source.name===sourcesBySlot[pending]),baseline=status.find(source=>source.name===sourcesBySlot[pending]);
   if(index>=0&&baseline){
-   if(eligible)result.sources[index]={...baseline,detail:'Waiting for the next background batch. First results are shown while more sources are checked.'};
-   else if(pending==='auction'&&keys.marketcheck)result.sources[index]={...baseline,status:'unavailable',detail:'Excluded by your seller or maximum-price filter: auction seller identity and final purchase price are unconfirmed.'};
+   if(eligible&&result.sources[index].status!=='error')result.sources[index]={...baseline,detail:'Waiting for the next background batch. First results are shown while more sources are checked.'};
+   else if(!eligible&&pending==='auction'&&keys.marketcheck)result.sources[index]={...baseline,status:'unavailable',detail:'Excluded by your seller or maximum-price filter: auction seller identity and final purchase price are unconfirmed.'};
   }
  }
  if(next.retailers!==null){
   const cursorNames=new Set<string>(Object.values(sourcesBySlot));
-  result.sources=result.sources.map(source=>{const baseline=status.find(row=>row.name===source.name);return !cursorNames.has(source.name)&&baseline?.status==='ready'?baseline:source});
+  result.sources=result.sources.map(source=>{const baseline=status.find(row=>row.name===source.name);return !cursorNames.has(source.name)&&baseline?.status==='ready'&&source.status!=='error'?baseline:source});
  }
  return {...result,nextCursor:Object.values(next).some(value=>value!==null)?next:null};
 }

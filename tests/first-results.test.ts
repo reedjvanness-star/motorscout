@@ -48,3 +48,12 @@ assert.equal(only.nextCursor,null,'do not queue unconfigured sources');
 const failed=await firstResults(initialFilters,{autodev:'test',marketcheck:'test'},(f,k,c)=>searchInventory(f,k,c,async()=>new Response('',{status:429})));
 assert.equal(healthyCursor(failed.nextCursor,failed.sources)?.dealer,0,'a failed first source cannot prevent checking the others');
 console.log('PASS: first-feed response, complete deferred coverage, seller filters and failure recovery');
+
+const cooling=await firstResults(initialFilters,{autodev:'test',marketcheck:'test'},async(f,k,c)=>{
+ const result=await search(f,k,c);
+ result.sources=result.sources.map(source=>source.name.startsWith('MarketCheck')||source.name==='AutoTrader'?{...source,status:'error',detail:'HTTP 429. Retry after cooldown.'}:source);
+ return result;
+});
+assert.equal(cooling.sources.find(source=>source.name==='MarketCheck · dealer inventory')?.status,'error','first results must preserve known provider cooldown errors');
+assert.equal(cooling.sources.find(source=>source.name==='MarketCheck · auctions')?.status,'error','eligible but blocked auctions must not be labelled filter-excluded');
+assert.equal(healthyCursor(cooling.nextCursor,cooling.sources),null,'a successful exhausted first feed cannot start background retries against known blocked feeds');
