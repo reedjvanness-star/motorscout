@@ -1,3 +1,4 @@
+import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
 import {knownFeatures} from './vehicle-requirements';
 import {safeUrl, priceWarning, type Filters, type Listing} from './domain';
@@ -72,7 +73,7 @@ export function normalizeMarketcheck(x: any, privateSeller: boolean): Listing | 
   return {
     id: `marketcheck:${String(x.id ?? url)}`, vin: typeof x.vin === 'string' ? x.vin : null,
     title, make: String(b.make ?? ''), model: String(b.model ?? ''), trim: String(b.trim ?? ''),
-    evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?x.features.map((v:any)=>String(v?.name??v)):[])].join('\n'),exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(x.extra?.features)?x.extra.features:[])]),
+    engineText:providerEngineText(b.engine,{cylinders:b.cylinders,configuration:b.engine_configuration,engine_block:b.engine_block,aspiration:b.engine_aspiration??b.induction}),evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?x.features.map((v:any)=>String(v?.name??v)):[])].join('\n'),exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(x.extra?.features)?x.extra.features:[])]),
     year: number(b.year), priceWarning:priceWarning(price,number(b.year)), price, miles: number(x.miles),
     state: String(x.dealer?.state ?? x.seller?.state ?? x.state ?? '').toUpperCase(),
     city: String(x.dealer?.city ?? x.seller?.city ?? x.city ?? ''),

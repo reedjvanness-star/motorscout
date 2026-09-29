@@ -1,3 +1,4 @@
+import {requestedEngineTerms,engineTerm} from './engine-specs';
 import {applyLocationText} from './location-command';
 import {initialFilters,filterSchema,type Filters} from './domain';
 import {vehicles,curatedVehicles,states} from './vehicle-options';
@@ -12,6 +13,8 @@ const candidates=Object.entries(make?vehicles:curatedVehicles).filter(([m])=>!ma
 const exact=candidates.filter(c=>has(text,c.term));const unique=exact.filter(c=>!exact.some(x=>x.term.length>c.term.length&&has(x.term,c.term)));
 const preferred=unique.filter(c=>!f.make||c.make===f.make);const matched=preferred.length?preferred:unique;if(matched.length===1){if((matched[0].make!==old.make||matched[0].model!==old.model)&&!/\bkeep\b|same (?:budget|limits|requirements)/i.test(text))Object.assign(f,initialFilters);f.make=matched[0].make;f.model=matched[0].model;f.trim=matched[0].trim;recognized=true}else if(matched.length>1){question='Which model do you mean? Choose it in Use filters so I keep the right vehicle.'}
 const body=bodyType(t);if(body){f.bodyType=body as Filters['bodyType'];recognized=true;if(!matched.length&&body!==old.bodyType){f.model='';f.trim='';f.cabStyle='';if(!make)f.make=''}}
+const engines=requestedEngineTerms(t);if(engines.length){f.requiredTerms=[...f.requiredTerms.filter(x=>!engineTerm(x)),...engines];recognized=true;if(/\bor\b|\bnot\b|\bwithout\b/.test(t))question='Which single engine configuration should I require? Engine alternatives and exclusions need clarification.'}
+if(/\bnon[ -]turbo\b/.test(t))question='Do you want a naturally aspirated engine, or would a supercharged engine also work?';
 const colors=t.match(/\b(green|red|blue|black|white|silver|gray|grey|orange|yellow|brown|beige|gold|purple)\b/g);if(colors){if(new Set(colors).size>1||/\binterior\b|\b(?:black|white|red|brown) leather\b/.test(t))question='I can filter exterior color and leather seats, but cannot verify exact interior color or alternative colors yet. Which exterior color is required?';else{f.exteriorColor=colors[0]==='grey'?'gray':colors[0];recognized=true}}
 const fuel=t.match(/\b(diesel|electric|hybrid|gasoline|gas)\b/);if(fuel){f.fuel=(fuel[1]==='gas'?'gasoline':fuel[1]) as Filters['fuel'];recognized=true}
 const transmission=t.match(/\b(automatic|manual|stick shift)\b/);if(transmission){f.transmission=transmission[1]==='automatic'?'automatic':'manual';recognized=true}
@@ -32,7 +35,7 @@ if(/compare|best value|which of/.test(t))action='compare';if(/save/.test(t))acti
 if(/\btow(?:ing)?\s+(?:at least\s+)?\d|\bbed length\b|\b\d[\d.]*\s*(?:foot|ft)\s*bed|accident.free|service history|\bwithout\b|\bnot (?:green|red|blue|black|white)\b/.test(t))question='That includes a requirement I cannot verify with the current inventory fields. Tell me which supported requirements to search, or whether to leave that requirement out.';
 // Do not let a recognized budget/make silently discard an unknown model code.
 const codes=text.match(/\b(?:[a-z]{1,4}-?\d{1,3}[a-z]{0,2}|\d{1,3}[a-z]{1,3})\b/gi)??[];
-const unknownCode=codes.find(code=>! /^(?:\d+(?:k|mi|ft|st|nd|rd|th)|4x4|4wd|2wd|v[468])$/i.test(code.replace(/[- ]/g,''))&&!exact.some(c=>vehicleNameKey(c.term).includes(vehicleNameKey(code))));
+const unknownCode=codes.find(code=>!engineTerm(code)&&! /^(?:\d+(?:k|mi|ft|st|nd|rd|th)|4x4|4wd|2wd|v(?:4|6|8|10|12|16)|i[46]|w(?:12|16))$/i.test(code.replace(/[- ]/g,''))&&!exact.some(c=>vehicleNameKey(c.term).includes(vehicleNameKey(code))));
 if(unknownCode&&!question&&action==='search')question=`I could not identify “${unknownCode}” as a model. Enter its make and model in Use filters so I do not show unrelated cars.`;
 if(!recognized&&!question&&action==='search')question='Tell me the make and model, plus any budget, mileage or location limits—for example, “Audi RS7 under $60,000 in Colorado.” You can also choose them in Use filters.';
 return {filters:filterSchema.parse(f),question,action,mode:'Basic filter parser · AI not connected'};}

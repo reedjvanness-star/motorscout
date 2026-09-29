@@ -1,4 +1,4 @@
-import {rank,type Listing,type Source,type SearchCursor,type Filters} from './domain';
+import {rank,type Listing,type Source,type SearchCursor,type Filters,type Workspace} from './domain';
 import {applyPriceReview} from './price-review';
 
 // Collect a useful pool automatically; still bounded by provider quotas and exhaustion.
@@ -28,4 +28,16 @@ export function mergeSources(previous:Source[],incoming:Source[]):Source[]{
   if(source.inspected===undefined&&old.inspected!==undefined&&source.status==='searched')return {...old,hasMore:false};
   return {...source,total:source.total??old.total,count:(old.count??0)+(source.count??0),inspected:(old.inspected??0)+(source.inspected??0)};
  });
+}
+
+// Refinements keep the original collection so a shopper can change their mind.
+export function collectWorkspace(w:Workspace,incoming:Listing[],reset=false){
+ if(reset||!w.poolFilters)w.poolFilters={...w.filters};
+ w.collected=mergeSearch(reset?[]:(w.collected??w.listings),incoming,w.poolFilters).slice(0,3000);
+ w.listings=mergeSearch(w.collected,[],w.filters);
+}
+export function refineWorkspace(w:Workspace,filters:Filters){
+ if(!w.poolFilters)w.poolFilters={...w.filters};
+ if(!w.collected)w.collected=[...w.listings];
+ w.filters=filters;w.listings=mergeSearch(w.collected,[],filters);w.nextCursor=null;
 }

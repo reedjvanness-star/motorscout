@@ -1,3 +1,4 @@
+import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
 import {coordinates} from './location';
 import {safeUrl,priceWarning,type Listing,type Filters,type Source} from './domain';
@@ -72,7 +73,7 @@ export function normalizeMarketplace(x:any):Listing|null{
  return {id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
  postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(x.itemLocation?.geo?.latitude,x.itemLocation?.geo?.longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photoUrls(x.image)[0]??null,photosSourceUrl:url,photos:photoUrls(x.image),
  exteriorColor:string(host==='craigslist.org'?x.additionalProperties?.exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType)==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
- evidenceText:[title,description,...(Array.isArray(x.features)?x.features.map((v:any)=>string(v?.name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||offer?.seller?.['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
+ engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...(Array.isArray(x.features)?x.features.map((v:any)=>string(v?.name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||offer?.seller?.['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
  titleStatus:['clean','rebuilt','salvage'].includes(x.titleStatus)?x.titleStatus:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
  checkedAt:new Date().toISOString(),sourceUpdatedAt:string(x.datePosted)||null,concerns:['Marketplace listing retrieved through Apify; confirm price, fitted equipment and availability with the seller.'],comparables:[],median:null,reason:'',total:price};
 }

@@ -1,3 +1,4 @@
+import {engineMatches,type EngineVehicle} from './engine-specs';
 import {z} from 'zod';
 export const featureNames=['heated seats','cooled seats','leather seats','sunroof','navigation','backup camera','blind spot monitor','adaptive cruise control','Apple CarPlay','Android Auto','remote start','tow package','third row'] as const;
 export const detailFilterShape={
@@ -9,7 +10,7 @@ export const detailFilterShape={
 };
 export const detailFilters=z.object(detailFilterShape);
 export type DetailFilters=z.infer<typeof detailFilters>;
-export type VehicleDetails={exteriorColor?:string;baseExteriorColor?:string;bodyType?:string;fuel?:string;transmission?:string;cabStyle?:string;features?:string[];evidenceText?:string};
+export type VehicleDetails=EngineVehicle&{exteriorColor?:string;baseExteriorColor?:string;bodyType?:string;fuel?:string;transmission?:string;cabStyle?:string;features?:string[];evidenceText?:string};
 export const detailProperties={requiredTerms:{type:'array',items:{type:'string'},description:'Additional exact phrases that must appear in the seller listing, for custom equipment/specifications. Empty unless requested.'},exteriorColor:{type:'string',description:'Base exterior color, lowercase; empty for any.'},bodyType:{type:'string',enum:['','pickup','suv','sedan','coupe','convertible','hatchback','wagon','van']},fuel:{type:'string',enum:['','gasoline','diesel','hybrid','electric']},transmission:{type:'string',enum:['','automatic','manual']},drivetrain:{type:'string',enum:['','awd','4wd','fwd','rwd']},cabStyle:{type:'string',enum:['','crew','extended','regular']},features:{type:'array',items:{type:'string',enum:featureNames}}};
 const clean=(s:unknown)=>typeof s==='string'?s.toLowerCase().replace(/[-_/]/g,' ').replace(/\s+/g,' ').trim():'';
 export function bodyType(s:unknown){const v=clean(s);return /pickup|\btruck\b/.test(v)?'pickup':/sport utility|\bsuv\b|crossover/.test(v)?'suv':/convertible|cabriolet|roadster/.test(v)?'convertible':/hatchback/.test(v)?'hatchback':/wagon/.test(v)?'wagon':/\bvan\b|minivan/.test(v)?'van':/coupe/.test(v)?'coupe':/sedan/.test(v)?'sedan':''}
@@ -27,7 +28,7 @@ export function knownFeatures(value:unknown):string[]{
  const values=Array.isArray(value)?value:[];
  return featureNames.filter(name=>values.some(x=>{const text=clean(typeof x==='object'&&x?x.name:x);return !/\bno\b|without|not equipped/.test(text)&&featurePatterns[name].test(text)}));
 }
-export function detailsMatch(r:VehicleDetails&{drive:string},f:Partial<DetailFilters>){return (f.requiredTerms??[]).every(term=>evidenceMatches(r.evidenceText,term))&&(!f.exteriorColor||(colorMatches(r.exteriorColor,f.exteriorColor)||colorMatches(r.baseExteriorColor,f.exteriorColor)))&&(!f.bodyType||bodyType(r.bodyType)===f.bodyType)&&(!f.fuel||fuelType(r.fuel)===f.fuel)&&(!f.transmission||transmissionType(r.transmission)===f.transmission)&&(!f.drivetrain||driveType(r.drive)===f.drivetrain)&&(!f.cabStyle||cabStyle(r.cabStyle)===f.cabStyle)&&(f.features??[]).every(x=>(r.features??[]).includes(x))}
+export function detailsMatch(r:VehicleDetails&{drive:string},f:Partial<DetailFilters>){return (f.requiredTerms??[]).every(term=>engineMatches(r,term)??evidenceMatches(r.evidenceText,term))&&(!f.exteriorColor||(colorMatches(r.exteriorColor,f.exteriorColor)||colorMatches(r.baseExteriorColor,f.exteriorColor)))&&(!f.bodyType||bodyType(r.bodyType)===f.bodyType)&&(!f.fuel||fuelType(r.fuel)===f.fuel)&&(!f.transmission||transmissionType(r.transmission)===f.transmission)&&(!f.drivetrain||driveType(r.drive)===f.drivetrain)&&(!f.cabStyle||cabStyle(r.cabStyle)===f.cabStyle)&&(f.features??[]).every(x=>(r.features??[]).includes(x))}
 export function detailLabels(f:Partial<DetailFilters>){return [...(f.requiredTerms??[]),f.exteriorColor?`${f.exteriorColor} exterior`:'',f.bodyType,f.fuel,f.transmission,f.drivetrain?.toUpperCase(),f.cabStyle?`${f.cabStyle} cab`:'',...(f.features??[])].filter(Boolean) as string[]}
 export function detailChanges(a:Partial<DetailFilters>,b:Partial<DetailFilters>){return (a.requiredTerms??[]).some(x=>!(b.requiredTerms??[]).includes(x))||(['exteriorColor','bodyType','fuel','transmission','drivetrain','cabStyle'] as const).some(k=>!!a[k]&&a[k]!==b[k])||(a.features??[]).some(x=>!(b.features??[]).includes(x))}
 

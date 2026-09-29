@@ -1,13 +1,13 @@
 import {resolveZip} from '@/lib/zip-location';
 import {localLocationCommand} from '@/lib/location-command';
-import {localScoutCommand,localScoutRefinement} from '@/lib/local-scout-command';
+import {localScoutCommand,loadedScoutRefinement} from '@/lib/local-scout-command';
 import {withMarketplaceAccess} from '@/lib/marketplace-access';
 import {prepareChatComparison} from '@/lib/chat-comparison';
 import {workspaceCars,toggleComparison} from '@/lib/shortlist';
 import {alertSnapshot,saveAlert,checkAlert,emailReady} from '@/lib/alerts';
 import {alertSearchKey} from '@/lib/alert-matches';
 import {resolveSearchVehicle} from '@/lib/catalog-server';
-import {healthyCursor,mergeSearch,mergeSources} from '@/lib/search-session';
+import {healthyCursor,mergeSources,collectWorkspace,refineWorkspace} from '@/lib/search-session';
 import {applyPriceReview,checkListingPrice} from '@/lib/price-review';
 import {inventoryKeys,connectionStatus,providerKey} from '@/lib/connections';
 import {identity,readWorkspace,writeWorkspace,limitUsage,boundedJson,failure,filterSchema,config,db,schedulerReady} from '@/lib/server';
@@ -19,11 +19,11 @@ async function snapshot(id:string){const workspace=await readWorkspace(id),conne
 async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>JSON.parse(n.cars)).find((r:any)=>r.id===carId)}
 export async function GET(req:Request){try{return Response.json(await snapshot(identity(req)),{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{const id=identity(req),a=await boundedJson(req),w=await readWorkspace(id);const reply=(text:string,ids?:string[])=>w.messages.push({role:'assistant',text,ids,at:Date.now()});let search=false;
-if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:localScoutRefinement(a.text,w.filters)??localLocationCommand(a.text,w.filters)??await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
+if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:loadedScoutRefinement(a.text,w)??localLocationCommand(a.text,w.filters)??await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;
 if(parsed.question)reply(parsed.question);
 else if(parsed.action==='refine'){
- w.filters=filterSchema.parse(parsed.filters);w.listings=mergeSearch(w.listings,[],w.filters);w.nextCursor=null;
- reply(`Filtered the cars already loaded: ${w.listings.length} match. No paid AI call or new marketplace search was used. For fresh inventory, use the filters and press Show matching cars.`,w.listings.slice(0,12).map(car=>car.id));
+ refineWorkspace(w,filterSchema.parse(parsed.filters));
+ reply(`Filtered your collection: ${w.listings.length} match out of ${w.collected?.length??w.listings.length} collected cars. No paid AI call or new marketplace search was used. Say “show all collected cars” to restore the original pool, or use Show matching cars for fresh inventory.`,w.listings.slice(0,12).map(car=>car.id));
 }
 else if(parsed.action==='compare')w.messages.push({role:'assistant',...prepareChatComparison(w,a.text),at:Date.now()});
 else if(parsed.action==='save')reply('Use Save on a recommendation to keep it in Saved cars. I won’t guess which car you meant.');
@@ -39,13 +39,13 @@ else if(a.action==='reviewPrices'){
  const reviewed=await Promise.all(rows.map(async r=>applyPriceReview(r,await checkListingPrice(r))));
  const latest=await readWorkspace(id);if(latest.searchedAt!==w.searchedAt)throw Error('Your search changed during price checking. Recheck the new results.');Object.assign(w,latest);
  const updated=new Map(reviewed.map(r=>[r.id,r]));
- w.listings=w.listings.map(r=>updated.get(r.id)??r);w.saved=w.saved.map(r=>updated.get(r.id)??r);w.comparisonCars=w.comparisonCars?.map(r=>updated.get(r.id)??r);
+ w.listings=w.listings.map(r=>updated.get(r.id)??r);w.collected=w.collected?.map(r=>updated.get(r.id)??r);w.saved=w.saved.map(r=>updated.get(r.id)??r);w.comparisonCars=w.comparisonCars?.map(r=>updated.get(r.id)??r);
 }
 else if(a.action==='cancel'){w.pending=null;reply('Kept your original requirements.');}
 else if(a.action==='save'){const row=w.listings.find(r=>r.id===a.id)||w.saved.find(r=>r.id===a.id)||w.comparisonCars?.find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!row)throw Error('This listing is no longer in your results.');if(w.saved.some(r=>r.id===row.id)){w.saved=w.saved.filter(r=>r.id!==row.id)}else{if(w.saved.length>=100)throw Error('You can save up to 100 cars.');w.saved.push(row)}}
 else if(a.action==='compare'){const candidate=workspaceCars(w).find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!candidate)throw Error('Listing not found.');toggleComparison(w,candidate)}
 else if(a.action==='resetChat'){w.messages=[];w.pending=null;}
-else if(a.action==='newSearch'){w.filters={...initialFilters};w.messages=[];w.listings=[];w.sources=[];w.pending=null;w.searchedAt=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;}
+else if(a.action==='newSearch'){w.filters={...initialFilters};w.messages=[];w.listings=[];w.collected=[];w.poolFilters=undefined;w.sources=[];w.pending=null;w.searchedAt=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;}
 else if(a.action==='saveSearch'){
  const filters=a.filters?filterSchema.parse(a.filters):w.filters;
  if(a.enabled!==undefined&&typeof a.enabled!=='boolean')throw Error('Invalid alert setting.');
@@ -82,7 +82,7 @@ else if(a.action==='deleteAlert'){
   db().prepare('DELETE FROM alerts WHERE id=? AND user_id=?').bind(alertId,id),
  ]);
 }
-else if(a.action==='loadSearch'){const row=await db().prepare('SELECT filters FROM alerts WHERE id=? AND user_id=?').bind(String(a.id),id).first<{filters:string}>();if(!row)throw Error('Saved search not found.');w.filters=filterSchema.parse(JSON.parse(row.filters));w.listings=[];w.searchedAt=null;w.pending=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;w.sources=[];reply('Saved filters loaded. Press Search to check current listings.');}
+else if(a.action==='loadSearch'){const row=await db().prepare('SELECT filters FROM alerts WHERE id=? AND user_id=?').bind(String(a.id),id).first<{filters:string}>();if(!row)throw Error('Saved search not found.');w.filters=filterSchema.parse(JSON.parse(row.filters));w.listings=[];w.collected=[];w.poolFilters=undefined;w.searchedAt=null;w.pending=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;w.sources=[];reply('Saved filters loaded. Press Search to check current listings.');}
 else throw Error('Unknown action.');
 if(search){
   const access=await connectionStatus(id);
@@ -98,7 +98,7 @@ if(search){
   const succeeded=result.sources.some(s=>s.status==='searched'&&s.inspected!==undefined);
   if(!continuing)w.searchId=crypto.randomUUID();
   const keepLoaded=continuing||a.action==='chat'||a.action==='confirm';
-  if(succeeded||!continuing){w.listings=mergeSearch(keepLoaded?w.listings:[],result.listings,w.filters);w.batch=continuing?(w.batch??1)+1:1;w.searchedAt=result.checkedAt;}
+  if(succeeded||!continuing){const retained=keepLoaded?(w.collected??w.listings):[];collectWorkspace(w,[...retained,...result.listings],!continuing);w.batch=continuing?(w.batch??1)+1:1;w.searchedAt=result.checkedAt;}
   w.sources=continuing?mergeSources(w.sources,result.sources):result.sources;w.nextCursor=result.nextCursor;
   const message=access.apify&&!access.marketcheck&&!access.autodev?'Your requirements are ready. Searching the connected marketplaces next; results may take a few minutes.':!succeeded?'Some inventory sources could not be checked. Your collected cars remain available. Open Sources for details.':`Found ${w.listings.length} matching cars across the inventory checked so far. ${healthyCursor(w.nextCursor,w.sources)?'More inventory pages are available.':'All currently accessible pages for this search have been checked.'} ${w.listings.length<5?'Fewer than five exact matches have been found so far; your requirements have not been relaxed. ':''}Your requested requirements are shown beside the results. Seller prices and equipment still need confirmation.`;
   if(continuing&&w.messages.at(-1)?.role==='assistant')w.messages[w.messages.length-1]={role:'assistant',text:message,ids:w.listings.slice(0,12).map(r=>r.id),at:Date.now()};
