@@ -25,7 +25,9 @@ export function marketplaceInput(f:Filters,batch=0){
  const regions=batch>0?marketplaceRegionBatch('automotive',f.state,batch-1).regions:[];
  return {...(f.zip?{zipCodes:[f.zip],distanceMiles:f.radiusMiles}:{}),sources:[...(batch===0?['cars-com','cargurus','truecar']:[]),...(regions.length?['craigslist']:[])],craigslistRegions:regions,make:f.make,model:f.model,
   keywords:[f.trim,f.exteriorColor,f.bodyType,...f.features,...f.requiredTerms].filter(Boolean).length?[[f.make,f.model,f.trim,f.exteriorColor,f.bodyType,...f.features,...f.requiredTerms].filter(Boolean).join(' ')]:[],
-  condition:'used',detail:'full',priceCurrency:'USD',mileageUnit:'mi',maxResultsPerUrl:5,maxResults:15,
+  // Request a useful pool; the unchanged provider charge cap and free-credit gate
+  // remain authoritative. A larger result ceiling never guarantees this many cars.
+  condition:'used',detail:'full',priceCurrency:'USD',mileageUnit:'mi',maxResultsPerUrl:20,maxResults:60,
   ...(f.minYear!==null?{yearFrom:f.minYear}:{}),...(f.maxPrice!==null?{priceMax:Math.max(0,f.maxPrice-f.shippingAllowance)}:{}),
   ...(f.maxMiles!==null?{mileageMax:f.maxMiles}:{}),...(f.transmission?{transmission:f.transmission}:{}),
   ...(f.fuel?{fuelType:f.fuel==='gasoline'?'gas':f.fuel}:{}),...(f.seller!=='any'?{sellerType:f.seller==='private'?'owner':'dealer'}:{}),...(f.cleanTitle?{titleStatus:'clean'}:{})};

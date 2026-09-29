@@ -20,7 +20,7 @@ assert.equal(rank([{...row,evidenceText:'Overland build. Black leather interior.
 assert.equal(rank([{...row,evidenceText:'No overland equipment. Black leather optional extra.'}],[],{...initialFilters,requiredTerms:['overland','black leather']}).length,0,'negated or optional specifications are not exact matches');
 assert(!marketplaceSources([row],true).some(s=>s.name==='AutoTrader'),'Apify cannot overwrite the separate AutoTrader feed status');
 const input=marketplaceInput({...initialFilters,make:'BMW',model:'M4',trim:'Competition',exteriorColor:'green',maxPrice:60000,shippingAllowance:1000,maxMiles:40000});
-assert.equal(input.priceMax,59000);assert.equal(input.maxResults,15);assert.equal(input.sources.length,3);assert(input.keywords[0].includes('Competition green'));
+assert.equal(input.priceMax,59000);assert.equal(input.maxResults,60);assert.equal(input.maxResultsPerUrl,20);assert.equal(input.sources.length,3);assert(input.keywords[0].includes('Competition green'));
 assert.equal(input.craigslistRegions.length,0,'Craigslist must not consume the other sources shared result cap');
 const regional=marketplaceInput(initialFilters,1);
 assert.equal(regional.craigslistRegions.length,20);
