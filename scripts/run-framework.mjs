@@ -1,9 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readExecutionProfile } from "./execution-profile.mjs";
+import { randomUUID } from "node:crypto";
 
 const [command, ...args] = process.argv.slice(2);
 if (!["dev", "build"].includes(command)) throw new Error("Expected dev or build.");
+// Give each publication its own asset URLs. Some generated shared chunks keep
+// their filename while their imports change, so filename hashes alone are not
+// sufficient to prevent a browser from mixing adjacent releases.
+if (command === "build") process.env.MOTORSCOUT_BUILD_ID = randomUUID();
 const managedLinux = readExecutionProfile() === "managed-linux";
 
 if (managedLinux && command === "build") {
