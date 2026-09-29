@@ -26,7 +26,7 @@ const featurePatterns:Record<string,RegExp>={
 };
 export function knownFeatures(value:unknown):string[]{
  const values=Array.isArray(value)?value:[];
- return featureNames.filter(name=>values.some(x=>{const text=clean(typeof x==='object'&&x?x.name:x);return !/\bno\b|without|not equipped/.test(text)&&featurePatterns[name].test(text)}));
+ return featureNames.filter(name=>values.some(x=>{const text=clean(typeof x==='object'&&x?x.name:x);return !/\bno\b|\bwithout\b|not equipped|not included|available separately|optional extra/.test(text)&&featurePatterns[name].test(text)}));
 }
 export function detailsMatch(r:VehicleDetails&{drive:string},f:Partial<DetailFilters>){return (f.requiredTerms??[]).every(term=>engineMatches(r,term)??evidenceMatches(r.evidenceText,term))&&(!f.exteriorColor||(colorMatches(r.exteriorColor,f.exteriorColor)||colorMatches(r.baseExteriorColor,f.exteriorColor)))&&(!f.bodyType||bodyType(r.bodyType)===f.bodyType)&&(!f.fuel||fuelType(r.fuel)===f.fuel)&&(!f.transmission||transmissionType(r.transmission)===f.transmission)&&(!f.drivetrain||driveType(r.drive)===f.drivetrain)&&(!f.cabStyle||cabStyle(r.cabStyle)===f.cabStyle)&&(f.features??[]).every(x=>(r.features??[]).includes(x))}
 export function detailLabels(f:Partial<DetailFilters>){return [...(f.requiredTerms??[]),f.exteriorColor?`${f.exteriorColor} exterior`:'',f.bodyType,f.fuel,f.transmission,f.drivetrain?.toUpperCase(),f.cabStyle?`${f.cabStyle} cab`:'',...(f.features??[])].filter(Boolean) as string[]}

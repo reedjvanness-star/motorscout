@@ -34,3 +34,10 @@ for(const text of ['Keep this M5 search but lower the mileage.','Lower mileage',
 }
 const explicit=await interpretSearch('lower the mileage to 40,000 miles',initialFilters,[],{apiKey:'test-only',request:async()=>Response.json({choices:[{message:{tool_calls:[{function:{name:'update_search',arguments:JSON.stringify({filters:{...initialFilters,maxMiles:40000},question:'',action:'search'})}}]}}]})});
 assert.equal(explicit.filters.maxMiles,40000);assert.equal(explicit.action,'search');
+
+for(const evidence of ['Heated seats available separately','Heated seats are an optional extra','Heated seats not included','Not equipped with heated seats']){
+ const features=knownFeatures([evidence]);
+ assert.deepEqual(features,[],`optional or absent equipment is not fitted: ${evidence}`);
+ assert(!detailsMatch({drive:'',features},{features:['heated seats']}));
+}
+assert.deepEqual(knownFeatures(['Heated front seats included']),['heated seats'],'affirmative fitted equipment remains available');

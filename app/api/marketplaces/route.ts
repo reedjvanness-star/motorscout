@@ -28,7 +28,8 @@ export async function POST(req:Request){try{
  const hasMore=(j:Job)=>!shared&&!facebook&&!retail&&((j.batch??0)===0||marketplaceRegionBatch('automotive',w.filters.state,(j.batch??0)-1).hasMore);
  if(a.action==='start'){
   const advance=job?.searchId===w.searchId&&job.state==='IMPORTED'&&a.advance===true&&hasMore(job);
-  if(job?.searchId===w.searchId&&!advance&&!(job.state==='FAILED'&&!job.runId))return Response.json({done:terminal(job.state),state:job.state,hasMore:hasMore(job)});
+  // Provider completion still needs a poll to import its dataset after a refresh.
+  if(job?.searchId===w.searchId&&!advance&&!(job.state==='FAILED'&&!job.runId))return Response.json({done:job.state==='IMPORTED',state:job.state,hasMore:hasMore(job)});
   if(job?.runId&&!terminal(job.state)){try{await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId)+'/abort',{method:'POST'})}catch{throw Error('Previous marketplace search could not be stopped. Retry before starting another.')}}
   const next:Job={searchId:w.searchId,state:'STARTING',startedAt:Date.now(),batch:advance?(job!.batch??0)+1:job?.searchId===w.searchId?(job.batch??0):0};
   const input=facebook?facebookInput(w.filters):retail?retailerMarketplaceInput(w.filters):marketplaceInput(w.filters,next.batch);

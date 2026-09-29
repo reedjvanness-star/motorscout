@@ -30,3 +30,9 @@ assert.equal(rank(known,known,{...f,shippingAllowance:10000}).length,0,'shipping
 console.log('PASS: 11 filter, fee, shipping, duplicate, confirmation, and comparable-evidence checks');
 assert.deepEqual(availableComparisonIds([base],['missing-1',base.id,'missing-2',base.id]),[base.id],'unavailable and repeated cars cannot consume comparison slots');
 assert.deepEqual(availableComparisonIds([base,{...base,id:'saved-car'}],['saved-car',base.id]),['saved-car',base.id],'saved comparisons retain selection order');
+
+const target=known[0];
+const availableComps=known.slice(1,5);
+const unavailableComp={...known[5],priceReview:{status:'unavailable' as const,checkedAt:new Date().toISOString(),reportedPrice:known[5].price,note:'The seller reports this listing unavailable.'}};
+assert.equal(rank([target],[...availableComps,unavailableComp],f)[0].median,null,'an unavailable listing cannot supply the fifth comparable even without a price warning');
+assert.equal(rank([target],[...availableComps,known[5]],f)[0].median,31500,'five available condition-matched listings still support a median');

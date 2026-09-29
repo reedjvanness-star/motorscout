@@ -46,3 +46,16 @@ assert(!marketplaceSources([],true,'CA',0).some(s=>s.name==='Craigslist'));
 const plannedRegions:string[]=[];
 for(let batch=1;batch<=21;batch++)plannedRegions.push(...marketplaceInput(initialFilters,batch).craigslistRegions);
 assert.equal(plannedRegions.length,413);assert.equal(new Set(plannedRegions).size,413);
+
+const explicitDealer=normalizeMarketplace({...raw,sellerType:undefined,seller:{'@type':'AutoDealer'}})!;
+assert.equal(explicitDealer.seller,'dealer','explicit top-level AutoDealer is seller evidence');
+assert.equal(rank([explicitDealer],[],{...initialFilters,seller:'dealer'}).length,1);
+for(const seller of [undefined,{}, {name:'Example Dealer'}, {'@type':'Organization'}, {'@type':'Person'}]){
+ const unknownSeller=normalizeMarketplace({...raw,sellerType:undefined,seller})!;
+ assert.equal(unknownSeller.seller,'unknown','seller names and generic organization/person types cannot establish seller category');
+ assert.equal(rank([unknownSeller],[],{...initialFilters,seller:'dealer'}).length,0);
+}
+assert.equal(normalizeMarketplace({...raw,sellerType:undefined,offers:{...raw.offers,seller:{'@type':'AutoDealer'}}})!.seller,'dealer','offer seller evidence still works');
+
+const optionalEquipment=normalizeMarketplace({...raw,description:'Heated seats available separately as an optional extra.'})!;
+assert.equal(rank([optionalEquipment],[],{...initialFilters,features:['heated seats']}).length,0,'marketplace description cannot turn optional equipment into an exact feature match');
