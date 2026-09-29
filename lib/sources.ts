@@ -1,7 +1,7 @@
 import {config,db} from './server';
 import {cachedInventory} from './inventory-cache';
 import {firstResults} from './first-results';
-import {inventoryStatus, searchInventory, type InventoryKeys} from './inventory';
+import {inventoryStatus, type InventoryKeys} from './inventory';
 import {type Filters, type SearchCursor} from './domain';
 
 function configured(keys:InventoryKeys):InventoryKeys {

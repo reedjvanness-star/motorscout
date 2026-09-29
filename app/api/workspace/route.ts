@@ -10,10 +10,10 @@ import {resolveSearchVehicle} from '@/lib/catalog-server';
 import {healthyCursor,mergeSources,collectWorkspace,refineWorkspace} from '@/lib/search-session';
 import {applyPriceReview,checkListingPrice} from '@/lib/price-review';
 import {inventoryKeys,connectionStatus,providerKey} from '@/lib/connections';
-import {identity,readWorkspace,writeWorkspace,limitUsage,boundedJson,failure,filterSchema,config,db,schedulerReady} from '@/lib/server';
+import {identity,readWorkspace,writeWorkspace,limitUsage,boundedJson,failure,filterSchema,db} from '@/lib/server';
 import {sourceStatus,searchListings} from '@/lib/sources';
 import {interpret} from '@/lib/assistant';
-import {availableComparisonIds,relaxed,money,initialFilters} from '@/lib/domain';
+import {initialFilters} from '@/lib/domain';
 export const dynamic='force-dynamic';
 async function snapshot(id:string){const workspace=await readWorkspace(id),connections=await connectionStatus(id);const sources=withMarketplaceAccess(sourceStatus(await inventoryKeys(id)),connections);workspace.sources=withMarketplaceAccess(workspace.sources.length?workspace.sources:sources,connections);return {workspace,...await alertSnapshot(id),ai:!!await providerKey(id,'openai'),sources,connections}}
 async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>JSON.parse(n.cars)).find((r:any)=>r.id===carId)}

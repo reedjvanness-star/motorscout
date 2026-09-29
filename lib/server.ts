@@ -3,7 +3,7 @@ import {restoreComparisons} from './shortlist';
 import {encodeWorkspace,decodeWorkspace} from './workspace-codec';
 import {applyPriceReview} from './price-review';
 import { env } from 'cloudflare:workers';
-import { blankWorkspace,filterSchema,priceWarning,matches,rank,type Listing, type Workspace } from './domain';
+import { blankWorkspace,filterSchema,priceWarning,rank,type Listing, type Workspace } from './domain';
 export const config=()=>env as unknown as Record<string,any>;
 export const db=()=>{const d=config().DB as D1Database|undefined;if(!d)throw Error('Storage is temporarily unavailable. Please try again.');return d};
 export class SignInRequired extends Error {constructor(){super('Please sign in to save and search.');this.name='SignInRequired';}}
