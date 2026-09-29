@@ -88,7 +88,7 @@ export function normalizeMarketplace(input:unknown):Listing|null{
 export class MarketplaceError extends Error {}
 export async function apifyRequest(key:string,path:string,init:RequestInit={},request:typeof fetch=fetch){
  let res:Response;
- try{res=await request('https://api.apify.com/v2/'+path,{...init,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});}catch(e){throw new MarketplaceError(`The server could not reach Apify (${e instanceof Error&&['TypeError','TimeoutError','AbortError'].includes(e.name)?e.name:'network error'}). No connection was saved.`);}
+ try{res=await request('https://api.apify.com/v2/'+path,{...init,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});}catch(e){throw new MarketplaceError(`The server could not reach Apify (${e instanceof Error&&['TypeError','TimeoutError','AbortError'].includes(e.name)?e.name:'network error'}). Check the search status before retrying.`);}
  if(!res.ok)throw new MarketplaceError(`Marketplace provider request failed (${res.status}). Existing results are unchanged.`);
  return res.json() as Promise<unknown>;
 }

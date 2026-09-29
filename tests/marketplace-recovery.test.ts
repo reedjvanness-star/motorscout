@@ -15,23 +15,24 @@ class Statement{
  values:SQLInputValue[]=[];constructor(public query:string){}
  bind(...values:SQLInputValue[]){this.values=values;return this}
  async first(){return sql.prepare(this.query).get(...this.values)??null}
- async run(){const r=sql.prepare(this.query).run(...this.values);return {meta:{changes:Number(r.changes)}}}
+ async run(){if(this.values[2]==='visitor:marketplace-job'&&beforeJobWrite){const hook=beforeJobWrite;beforeJobWrite=undefined;await hook()}const r=sql.prepare(this.query).run(...this.values);return {meta:{changes:Number(r.changes)}}}
 }
 const car=normalizeMarketcheck({id:'recovered-car',price:45000,vdp_url:'https://example.test/car',build:{make:'BMW',model:'M4',year:2023},miles:12000},false)!;
 let failSecondStatement=false;
+let beforeJobWrite:(()=>Promise<void>)|undefined;
 let beforeStart:(()=>Promise<void>)|undefined;
 let beforeBatch:(()=>Promise<void>)|undefined,beforeDataset:(()=>Promise<void>)|undefined;
 const database={prepare:(query:string)=>new Statement(query),async batch(statements:Statement[]){
  const hook=beforeBatch;beforeBatch=undefined;if(hook)await hook();
  sql.exec('BEGIN');try{const results=statements.map((statement,index)=>{if(failSecondStatement&&index===1){failSecondStatement=false;throw Error('Injected second-statement failure')}const r=sql.prepare(statement.query).run(...statement.values);return {meta:{changes:Number(r.changes)}}});sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}
 }};
-const fixture={status:'SUCCEEDED',starts:0,reads:0,env:{DB:database},car,async start(){fixture.starts++;const hook=beforeStart;beforeStart=undefined;if(hook)await hook();return {id:'new-run',status:'RUNNING'}},async dataset(){const hook=beforeDataset;beforeDataset=undefined;if(hook)await hook();return [car]}};
+const fixture={reservation:null as {runId?:string}|null,startError:'',safeFailure:false,startToken:'',status:'SUCCEEDED',starts:0,reads:0,env:{DB:database},car,async start(token?:string){fixture.startToken=token??'';fixture.starts++;if(fixture.startError)throw Error(fixture.startError);const hook=beforeStart;beforeStart=undefined;if(hook)await hook();return {id:'new-run',status:'RUNNING'}},async dataset(){const hook=beforeDataset;beforeDataset=undefined;if(hook)await hook();return [car]}};
 const fixtureGlobal=globalThis as typeof globalThis & {__recoveryFixture?:typeof fixture};
 fixtureGlobal.__recoveryFixture=fixture;
 const modules:Record<string,string>={
  connections:`export const providerKey=async()=> 'fixture-key',connectionStatus=async()=>({apifyShared:true});`,
  'shared-marketplace':`export const reserveBetaSearch=async()=>{};`,
- 'marketplace-budget':`export const startBudgetedMarketplaceRun=()=>globalThis.__recoveryFixture.start();`,
+ 'marketplace-budget':`export class MarketplaceStartError extends Error{constructor(message,safeToRetry){super(message);this.safeToRetry=safeToRetry}};export const marketplaceStartReservation=async()=>globalThis.__recoveryFixture.reservation;export const startBudgetedMarketplaceRun=async(...args)=>{const f=globalThis.__recoveryFixture;try{return await f.start(args[6])}catch(e){throw new MarketplaceStartError(e.message,f.safeFailure)}};`,
  'zip-location':`export const locateListings=async rows=>rows;`,
  apify:`const f=globalThis.__recoveryFixture;export const ACTOR='fixture-actor',FACEBOOK_ACTOR='fixture-facebook',MARKETPLACE_RUN_CAP=.04;export const marketplaceInput=()=>({query:'same-input'}),facebookInput=marketplaceInput,retailerMarketplaceInput=marketplaceInput;export const normalizeMarketplace=row=>row,normalizeFacebook=normalizeMarketplace;export const marketplaceSources=()=>[],retailerMarketplaceSources=marketplaceSources;export const apifyRequest=async(key,path)=>{f.reads++;if(path.startsWith('actor-runs/'))return {data:{actId:ACTOR,status:f.status,defaultDatasetId:'fixture-dataset'}};if(path.startsWith('datasets/'))return f.dataset();throw Error('Unexpected provider request');};`,
 };
@@ -45,9 +46,9 @@ try{
  }}]});
  const api: {POST:(req:Request)=>Promise<Response>;readWorkspace:(id:string)=>Promise<Workspace>;writeWorkspace:(id:string,w:Workspace)=>Promise<void>;readWorkspaceSnapshot:(id:string)=>Promise<{workspace:Workspace;payload:string}>}=await import(pathToFileURL(file).href);
  async function call(action:string,expectedStatus=200){const response=await api.POST(new Request('https://motorscout.test/api/marketplaces',{method:'POST',headers:{'Content-Type':'application/json','oai-authenticated-user-id':'visitor'},body:JSON.stringify({action,provider:'automotive',searchId:'current-search',advance:true})}));assert.equal(response.status,expectedStatus);return response.json() as Promise<{done:boolean;state:string}>}
- async function seed(state:string,runId:string|null='existing-run',searchId='current-search'){
-  const workspace=blankWorkspace();workspace.searchId='current-search';await api.writeWorkspace('visitor',workspace);fixture.status=state;fixture.starts=0;fixture.reads=0;
-  sql.prepare('INSERT OR REPLACE INTO workspaces VALUES(?,?,?)').run('visitor:marketplace-job',JSON.stringify({searchId,runId,state,startedAt:Date.now(),successful:true,inputKey:JSON.stringify({actor:'fixture-actor',input:{query:'same-input'}})}),Date.now());
+ async function seed(state:string,runId:string|null='existing-run',searchId='current-search',safeToRetry=false){
+  const workspace=blankWorkspace();workspace.searchId='current-search';await api.writeWorkspace('visitor',workspace);fixture.status=state;fixture.starts=0;fixture.reads=0;fixture.reservation=null;fixture.startError='';fixture.safeFailure=false;
+  sql.prepare('INSERT OR REPLACE INTO workspaces VALUES(?,?,?)').run('visitor:marketplace-job',JSON.stringify({searchId,runId,state,safeToRetry,startedAt:Date.now(),successful:true,inputKey:JSON.stringify({actor:'fixture-actor',input:{query:'same-input'}})}),Date.now());
  }
  // A browser interruption between start and first poll must not strand a terminal run.
  for(const state of ['SUCCEEDED','FAILED','TIMED-OUT','ABORTED']){
@@ -63,7 +64,35 @@ try{
  assert.equal((await call('start')).done,false);assert.equal(fixture.starts,0);
  assert.equal((await call('start')).done,false,'restarting a reused run must still request import');
  await call('poll');assert.equal((await api.readWorkspace('visitor')).listings.length,1);assert.equal(fixture.starts,0);
- await seed('FAILED',null);assert.equal((await call('start')).done,false);assert.equal(fixture.starts,1,'failed starts without a run remain retryable');
+ await seed('FAILED',null,'current-search',true);assert.equal((await call('start')).done,false);assert.equal(fixture.starts,1,'failed starts without a run remain retryable');
+
+ // A legacy failure had no trustworthy pre-POST classification and must not retry.
+ await seed('FAILED',null);assert.equal((await call('start')).state,'UNKNOWN');assert.equal(fixture.starts,0);
+ await seed('STARTING',null);const recent=await call('poll');assert.equal(recent.done,false);assert.equal(fixture.starts,0);
+ const staleJob={searchId:'current-search',state:'STARTING',startToken:'lost-job-write',startedAt:Date.now()-180000};
+ sql.prepare('UPDATE workspaces SET payload=? WHERE user_id=?').run(JSON.stringify(staleJob),'visitor:marketplace-job');
+ fixture.reservation={runId:'ledger-run'};fixture.status='SUCCEEDED';
+ assert.equal((await call('poll')).done,true,'known ledger run attaches and imports after a lost job-row update');
+ assert.equal(fixture.starts,0);assert.equal((await api.readWorkspace('visitor')).listings.length,1);
+ await seed('STARTING',null,'previous-search');
+ sql.prepare('UPDATE workspaces SET payload=? WHERE user_id=?').run(JSON.stringify({...staleJob,searchId:'previous-search'}),'visitor:marketplace-job');
+ fixture.reservation={};assert.equal((await call('start')).state,'UNKNOWN');assert.equal(fixture.starts,0,'a new search cannot overwrite an unresolved older start');
+ await seed('FAILED',null,'current-search',true);fixture.startError='network timeout after POST';
+ await call('start',400);assert(fixture.startToken,'start operation token is passed to the budget before POST');
+ assert.equal((await call('start')).state,'UNKNOWN');assert.equal(fixture.starts,1,'ambiguous starts do not repeat');
+ await seed('FAILED',null,'current-search',true);fixture.startError='preflight free-credit check failed';fixture.safeFailure=true;
+ await call('start',400);fixture.startError='';assert.equal((await call('start')).done,false);assert.equal(fixture.starts,2,'explicit safe preflight failure remains retryable');
+
+ // The provider accepted the run but updating the job row failed afterward.
+ await seed('FAILED',null,'current-search',true);
+ beforeStart=async()=>{fixture.reservation={runId:'new-run'};beforeJobWrite=async()=>{throw Error('Job write unavailable')}};
+ await call('start',400);assert.equal(fixture.starts,1);fixture.status='SUCCEEDED';
+ assert.equal((await call('poll')).done,true);assert.equal(fixture.starts,1,'lost job write recovers its ledger run without a second POST');
+ // Recovery itself uses CAS and cannot replace a newer job written concurrently.
+ await seed('STARTING',null);sql.prepare('UPDATE workspaces SET payload=? WHERE user_id=?').run(JSON.stringify(staleJob),'visitor:marketplace-job');fixture.reservation={runId:'ledger-run'};
+ const newer={searchId:'current-search',runId:'newer-run',state:'RUNNING',startedAt:Date.now()};
+ beforeJobWrite=async()=>{sql.prepare('UPDATE workspaces SET payload=? WHERE user_id=?').run(JSON.stringify(newer),'visitor:marketplace-job')};
+ await call('poll');assert.deepEqual(JSON.parse((sql.prepare('SELECT payload FROM workspaces WHERE user_id=?').get('visitor:marketplace-job') as {payload:string}).payload),newer);
  // Hold a stale poll after its provider status is captured; a newer poll wins.
  function barrier(){let release!:()=>void,entered!:()=>void;const waiting=new Promise<void>(resolve=>{release=resolve}),ready=new Promise<void>(resolve=>{entered=resolve});return {release,ready,hold:async()=>{entered();await waiting}}}
  for(const staleStatus of ['SUCCEEDED','RUNNING']){
@@ -110,7 +139,7 @@ try{
  const replaceJob=async()=>{sql.prepare('UPDATE workspaces SET payload=? WHERE user_id=?').run(JSON.stringify(replacement),'visitor:marketplace-job')};
  await seed('RUNNING');fixture.status='SUCCEEDED';beforeBatch=replaceJob;
  await call('poll',400);assert.equal((await api.readWorkspace('visitor')).listings.length,0);
- await seed('FAILED',null);beforeStart=replaceJob;await call('start');
+ await seed('FAILED',null,'current-search',true);beforeStart=replaceJob;await call('start');
  assert.deepEqual(JSON.parse((sql.prepare('SELECT payload FROM workspaces WHERE user_id=?').get('visitor:marketplace-job') as {payload:string}).payload),replacement,'late start only updates its exact STARTING claim');
  console.log('PASS: marketplace recovery, atomic imports, concurrent polls, stale statuses, saved/chat preservation, gzip and new-search isolation');
 }finally{sql.close();delete fixtureGlobal.__recoveryFixture;await rm(dir,{recursive:true,force:true})}

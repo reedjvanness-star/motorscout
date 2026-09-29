@@ -4,13 +4,13 @@ import {identity,db,readWorkspace,readWorkspaceSnapshot,commitMarketplaceImport,
 import {reserveBetaSearch} from '@/lib/shared-marketplace';
 import {providerKey,connectionStatus} from '@/lib/connections';
 import {apifyRequest,marketplaceInput,normalizeMarketplace,marketplaceSources,MARKETPLACE_RUN_CAP,ACTOR,FACEBOOK_ACTOR,facebookInput,normalizeFacebook,retailerMarketplaceInput,retailerMarketplaceSources} from '@/lib/apify';
-import {startBudgetedMarketplaceRun} from '@/lib/marketplace-budget';
+import {startBudgetedMarketplaceRun,marketplaceStartReservation,MarketplaceStartError} from '@/lib/marketplace-budget';
 import {marketplaceRegionBatch} from '@/lib/marketplace-regions';
 import {reusableMarketplaceJob} from '@/lib/marketplace-reuse';
 import {collectWorkspace} from '@/lib/search-session';
 import type {Listing,Source} from '@/lib/domain';
 export const dynamic='force-dynamic';
-type Job={searchId:string;runId?:string;state:string;startedAt:number;batch?:number;inputKey?:string;successful?:boolean};
+type Job={searchId:string;runId?:string;state:string;startedAt:number;batch?:number;inputKey?:string;successful?:boolean;startToken?:string;safeToRetry?:boolean;error?:string};
 const terminal=(state:string)=>['SUCCEEDED','FAILED','TIMED-OUT','ABORTED','IMPORTED'].includes(state);
 export async function POST(req:Request){try{
  const id=identity(req),a=await boundedJson(req),key=await providerKey(id,'apify');if(!key)throw Error('Connect your free marketplace account in Sources first.');
@@ -23,29 +23,54 @@ export async function POST(req:Request){try{
  if(facebook&&!marketplaceRegionBatch('facebook',w.filters.state).regions.length)return Response.json({done:true,state:'OUTSIDE_COVERAGE'});
  const actor=facebook?FACEBOOK_ACTOR:ACTOR;
  const jobId=id+(facebook?':facebook-job':retail?':retail-marketplace-job':':marketplace-job');
- const stored=await db().prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(jobId).first<{payload:string}>();
- const job:Job|undefined=stored?JSON.parse(stored.payload):undefined;
+ let stored=await db().prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(jobId).first<{payload:string}>();
+ let job:Job|undefined=stored?JSON.parse(stored.payload):undefined;
  const hasMore=(j:Job)=>!shared&&!facebook&&!retail&&((j.batch??0)===0||marketplaceRegionBatch('automotive',w.filters.state,(j.batch??0)-1).hasMore);
+ // Recover only a run correlated with this exact start; never guess from actor history.
+ if(job&&!job.runId&&!job.safeToRetry){
+  const reservation=job.startToken?await marketplaceStartReservation(db(),key,job.startToken):null;
+  if(reservation?.runId){
+   const recovered:Job={...job,runId:reservation.runId,state:'RUNNING',error:undefined};
+   const payload=JSON.stringify(recovered);
+   const attached=await db().prepare('UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?').bind(payload,Date.now(),jobId,stored!.payload).run();
+   if(attached.meta.changes!==1)return Response.json({done:false,state:'STARTING'});
+   job=recovered;stored={payload};
+  }else{
+   if(job.state==='STARTING'&&Date.now()-job.startedAt<120000)return Response.json({done:false,state:'STARTING'});
+   const error='This marketplace start could not be confirmed. Another run has not been started, and its credit reservation remains protected. Check the original run in your connected Apify account or contact the MotorScout owner to reconcile it. Your saved cars and other inventory remain available.';
+   const uncertain:Job={...job,state:'UNKNOWN',safeToRetry:false,error};
+   await db().prepare('UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?').bind(JSON.stringify(uncertain),Date.now(),jobId,stored!.payload).run();
+   return Response.json({done:true,state:'UNKNOWN',error});
+  }
+ }
+
  if(a.action==='start'){
   const advance=job?.searchId===w.searchId&&job.state==='IMPORTED'&&a.advance===true&&hasMore(job);
   // Provider completion still needs a poll to import its dataset after a refresh.
-  if(job?.searchId===w.searchId&&!advance&&!(job.state==='FAILED'&&!job.runId))return Response.json({done:job.state==='IMPORTED',state:job.state,hasMore:hasMore(job)});
+  if(job?.searchId===w.searchId&&!advance&&!(job.state==='FAILED'&&!job.runId&&job.safeToRetry===true))return Response.json({done:job.state==='IMPORTED',state:job.state,hasMore:hasMore(job)});
   if(job?.runId&&!terminal(job.state)){try{await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId)+'/abort',{method:'POST'})}catch{throw Error('Previous marketplace search could not be stopped. Retry before starting another.')}}
-  const next:Job={searchId:w.searchId,state:'STARTING',startedAt:Date.now(),batch:advance?(job!.batch??0)+1:job?.searchId===w.searchId?(job.batch??0):0};
+  const next:Job={searchId:w.searchId,state:'STARTING',startToken:crypto.randomUUID(),startedAt:Date.now(),batch:advance?(job!.batch??0)+1:job?.searchId===w.searchId?(job.batch??0):0};
   const input=facebook?facebookInput(w.filters):retail?retailerMarketplaceInput(w.filters):marketplaceInput(w.filters,next.batch);
   next.inputKey=JSON.stringify({actor,input});
   const startingPayload=JSON.stringify(next);
-  const locked=await db().prepare("INSERT INTO workspaces(user_id,payload,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at WHERE json_extract(workspaces.payload,'$.searchId') != ? OR (json_extract(workspaces.payload,'$.state')='FAILED' AND json_extract(workspaces.payload,'$.runId') IS NULL) OR workspaces.payload=? RETURNING user_id").bind(jobId,JSON.stringify(next),Date.now(),w.searchId,advance?stored!.payload:'').first();
+  const locked=await db().prepare("INSERT INTO workspaces(user_id,payload,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at WHERE workspaces.payload=? RETURNING user_id").bind(jobId,JSON.stringify(next),Date.now(),stored?.payload??'').first();
   if(!locked)return Response.json({done:false,state:'STARTING'});
   try{
    if(!advance&&reusableMarketplaceJob(job,next.inputKey)){
     next.runId=job!.runId;next.state='SUCCEEDED';next.startedAt=job!.startedAt;next.successful=true;
    }else{
     if(shared)await reserveBetaSearch(db(),id);
-    const data=await startBudgetedMarketplaceRun(db(),key,actor,input,facebook?1:MARKETPLACE_RUN_CAP);
+    const data=await startBudgetedMarketplaceRun(db(),key,actor,input,facebook?1:MARKETPLACE_RUN_CAP,undefined,next.startToken);
     next.runId=data.id;next.state=data.status;
    }
-  }catch(e){next.state='FAILED';await db().prepare('UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?').bind(JSON.stringify(next),Date.now(),jobId,startingPayload).run();throw e;}
+  }catch(e){
+   next.safeToRetry=e instanceof MarketplaceStartError?e.safeToRetry:true;
+   if(e instanceof MarketplaceStartError&&e.runId){next.runId=e.runId;next.state='RUNNING';next.safeToRetry=false}
+   else next.state=next.safeToRetry?'FAILED':'UNKNOWN';
+   next.error=e instanceof Error?e.message:'Marketplace start failed.';
+   await db().prepare('UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?').bind(JSON.stringify(next),Date.now(),jobId,startingPayload).run();
+   throw e;
+  }
   await db().prepare("UPDATE workspaces SET payload=?,updated_at=? WHERE user_id=? AND payload=?").bind(JSON.stringify(next),Date.now(),jobId,startingPayload).run();
   return Response.json({done:false,state:next.state});
  }

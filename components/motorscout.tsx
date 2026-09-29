@@ -78,7 +78,7 @@ async function gatherMarketplaces(searchId:string,expanded=false){
  for(let batch=0;batch<4&&queue.length;batch++){
  const provider=queue.shift()!;
  if(stopGathering.current||queuedChat.current)break;
- const call=async(action:string)=>{const r=await fetch('/api/marketplaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,searchId,provider,advance:true})});const data:{done:boolean;hasMore?:boolean;error?:string}=await r.json();if(!r.ok)throw Error(data.error);return data;};
+ const call=async(action:string)=>{const r=await fetch('/api/marketplaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,searchId,provider,advance:true})});const data:{done:boolean;hasMore?:boolean;error?:string}=await r.json();if(!r.ok||data.error)throw Error(data.error||'Marketplace search could not be confirmed. Your existing cars remain available.');return data;};
  try{setPriceProgress(provider==='facebook'?'Searching Facebook Marketplace local regions…':provider==='retail'?'Searching Carvana inventory…':'Searching connected marketplaces…');let result=await call('start');
   for(let poll=0;poll<60&&!result.done&&!stopGathering.current&&!queuedChat.current;poll++){
    await new Promise(resolve=>setTimeout(resolve,5000));if(queuedChat.current)break;result=await call('poll');

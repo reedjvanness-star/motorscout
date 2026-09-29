@@ -1,7 +1,7 @@
 import {sqliteD1} from './sqlite-d1';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {startBudgetedMarketplaceRun} from '../lib/marketplace-budget';
+import {startBudgetedMarketplaceRun,marketplaceStartReservation,MarketplaceStartError} from '../lib/marketplace-budget';
 import {MARKETPLACE_RUN_CAP} from '../lib/apify';
 
 const sqlite=new DatabaseSync(':memory:');
@@ -58,5 +58,26 @@ try{
  assert.equal(recovered.pending.filter((p:{runId?:string;cap:number})=>!p.runId).length,3,'recover free headroom without forgiving uncertain charges');
  used=4.71;
  await assert.rejects(()=>startBudgetedMarketplaceRun(db,'fixture-key','actor',{},MARKETPLACE_RUN_CAP,request),/shared marketplace allowance/);
+ sqlite.prepare('DELETE FROM workspaces').run();used=0;failStart=false;
+ const correlated=await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'operation-known');
+ const knownStarts=starts;
+ assert.equal((await marketplaceStartReservation(db,'fixture-key','operation-known',request))?.runId,correlated.id);
+ assert.equal((await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'operation-known')).id,correlated.id);
+ assert.equal(starts,knownStarts,'the same correlated operation never creates another run');
+ await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'reconcile-known');
+ assert.equal((await marketplaceStartReservation(db,'fixture-key','operation-known',request))?.runId,correlated.id,'settled runs retain bounded recovery receipts');
+ failStart=true;
+ await assert.rejects(()=>startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'operation-unknown'),error=>error instanceof MarketplaceStartError&&!error.safeToRetry);
+ const uncertainStarts=starts;failStart=false;
+ await assert.rejects(()=>startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'operation-unknown'),error=>error instanceof MarketplaceStartError&&!error.safeToRetry);
+ assert.equal(starts,uncertainStarts,'ambiguous POST outcome cannot be repeated with the same operation token');
+ assert.deepEqual(await marketplaceStartReservation(db,'fixture-key','operation-unknown',request),{runId:undefined});
+ used=4.75;
+ await assert.rejects(()=>startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'preflight-failure'),error=>error instanceof MarketplaceStartError&&error.safeToRetry);
+ assert.equal(await marketplaceStartReservation(db,'fixture-key','preflight-failure',request),null,'preflight failure occurs before creating a hold or provider run');
+ used=0;cycle.startAt=new Date(Date.now()-500).toISOString();
+ await startBudgetedMarketplaceRun(db,'fixture-key','actor',{},0.04,request,'new-cycle');
+ assert.deepEqual(await marketplaceStartReservation(db,'fixture-key','operation-unknown',request),{runId:undefined},'cycle changes retain unknown reservations');
+ assert.equal((await marketplaceStartReservation(db,'fixture-key','operation-known',request))?.runId,correlated.id,'cycle changes preserve known operation receipts');
  console.log('PASS: real usage, reservation reconciliation, free-only gate, concurrency, ambiguous failure and billing-cycle reset');
 }finally{sqlite.close()}
