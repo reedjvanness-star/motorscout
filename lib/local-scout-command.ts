@@ -1,3 +1,4 @@
+import {mileageRequest,applyMileageRequest} from './mileage-range';
 import {relaxed} from './domain';
 import {engineTerm} from './engine-specs';
 // Exact, self-contained shortcuts only. Requests with extra requirements still use Scout.
@@ -13,11 +14,18 @@ export function localScoutRefinement(text:string,current:Filters,base:Filters=cu
  if(clean==='only awd'&&allowed({...current,awd:true,drivetrain:'awd'}))return {action:'refine',filters:{...current,awd:true,drivetrain:'awd'},question:''};
  if(clean==='lower mileage')return current.maxMiles===null
   ?{action:'clarify',filters:current,question:'What maximum mileage would you like? I can filter your loaded cars without starting a new marketplace search.'}
+  :current.minMiles!==null&&current.minMiles>Math.max(0,current.maxMiles-10000)
+  ?{action:'clarify',filters:current,question:'That would put the maximum below your minimum mileage. Which mileage range should I use?'}
   :{action:'refine',filters:{...current,maxMiles:Math.max(0,current.maxMiles-10000)},question:''};
- const mileage=clean.match(/^(?:(?:only )?(?:show(?: me)? )?(?:cars |ones )?)?(?:under|below|with (?:under|less than|fewer than)) ([\d,]+(?:\.\d+)?)\s*(k)? miles$/);
+ const mileage=mileageRequest(clean);
  if(mileage){
-  const maxMiles=Number(mileage[1].replaceAll(',',''))*(mileage[2]?1000:1);
-  if(Number.isInteger(maxMiles)&&maxMiles>=0&&maxMiles<=1000000&&allowed({...current,maxMiles}))return {action:'refine',filters:{...current,maxMiles},question:''};
+  const remainder=(clean.slice(0,mileage.start)+' '+clean.slice(mileage.end)).trim();
+  if(/^(?:(?:only|show|me|cars|ones|with|mileage|of|between|from)\s*)*$/.test(remainder)){
+   const next=applyMileageRequest(current,mileage);
+   const question=mileage.question||(next.minMiles!==null&&next.maxMiles!==null&&next.minMiles>next.maxMiles?'The minimum mileage is higher than the maximum. Which mileage range should I use?':'');
+   if(question)return {action:'clarify',filters:current,question};
+   if(allowed(next))return {action:'refine',filters:next,question:''};
+  }
  }
  const budget=clean.match(/^(?:(?:only )?(?:show(?: me)? )?(?:cars |ones )?)?(?:under|below|up to) \$([\d,]+(?:\.\d+)?)\s*(k)?$/);
  if(budget){

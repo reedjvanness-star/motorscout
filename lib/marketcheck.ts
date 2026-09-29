@@ -26,7 +26,7 @@ export function marketcheckUrl(f: Filters, privateSeller: boolean, offset = 0, a
   if(f.zip){p.set('zip',f.zip);p.set('radius',String(f.radiusMiles));}
   for (const k of ['make', 'model', 'trim', 'state'] as const) if (f[k]) p.set(k, f[k]);
   if (f.maxPrice !== null) p.set('price_range', `1-${Math.max(1, f.maxPrice - f.shippingAllowance)}`);
-  if (f.maxMiles !== null) p.set('miles_range', `0-${f.maxMiles}`);
+  if (f.maxMiles !== null) p.set('miles_range', `${f.minMiles??0}-${f.maxMiles}`);
   if (f.minYear !== null) p.set('year_range', `${f.minYear}-2030`);
   if (f.awd) p.set('drivetrain', 'AWD');
   if (f.cleanTitle) p.set('carfax_clean_title', 'true');

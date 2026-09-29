@@ -15,3 +15,8 @@ assert.equal(rank([car],[car],{...f,shippingAllowance:1500}).length,0);
 assert.equal(rank([car],[car],f)[0].median,null);
 const url=autoDevUrl(f);assert.equal(url.searchParams.get('retailListing.price'),'1-35000');assert.equal(url.searchParams.get('retailListing.used'),'true');assert.equal(url.searchParams.get('limit'),'20');
 console.log('Auto.dev normalization, duplicate removal, and hard-filter checks passed.');
+
+assert.equal(autoDevUrl({...initialFilters,minMiles:10000,maxMiles:20000}).searchParams.get('retailListing.miles'),'10000-20000');
+assert.equal(autoDevUrl({...initialFilters,maxMiles:20000}).searchParams.get('retailListing.miles'),'0-20000');
+assert(!autoDevUrl({...initialFilters,minMiles:10000}).searchParams.has('retailListing.miles'),'minimum-only searches rely on local matching without inventing a maximum');
+assert.equal(autoDevUrl({...initialFilters,minMiles:10000,maxMiles:20000}).searchParams.get('limit'),'20','mileage bounds do not increase provider page size');

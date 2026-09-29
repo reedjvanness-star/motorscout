@@ -52,6 +52,16 @@ try{
  const api=await import(pathToFileURL(file).href);
  const id=await api.saveAlert('alice',filters,[],true,null,false);
  assert.equal(await api.saveAlert('alice',filters,[],true,null,false),id,'saving an existing search succeeds');
+ const ranged={...filters,minMiles:30000,maxMiles:50000};
+ const rangedId=await api.saveAlert('mileage',ranged,[],false,null,false);
+ const otherRangeId=await api.saveAlert('mileage',{...ranged,minMiles:40000},[],false,null,false);
+ assert.notEqual(rangedId,otherRangeId,'distinct lower mileage bounds are distinct saved searches');
+ const storedRange=filterSchema.parse(JSON.parse((sqlite.prepare('SELECT filters FROM alerts WHERE id=?').get(rangedId) as {filters:string}).filters));
+ assert.equal(storedRange.minMiles,30000);assert.equal(storedRange.maxMiles,50000);
+ const legacyFilters={...filters} as Partial<typeof filters>;delete legacyFilters.minMiles;
+ sqlite.prepare('UPDATE alerts SET filters=? WHERE id=?').run(JSON.stringify(legacyFilters),id);
+ assert.equal(await api.saveAlert('alice',filters,[],true,null,false),id,'legacy saved filters with no minimum remain equivalent');
+
  const unchanged=()=>({alert:sqlite.prepare('SELECT * FROM alerts WHERE id=?').get(id),settings:sqlite.prepare('SELECT * FROM alert_settings WHERE alert_id=?').get(id),seen:sqlite.prepare('SELECT * FROM alert_seen WHERE alert_id=?').all(id)});
  const original=unchanged();
  assert.equal(await api.saveAlert('alice',{...filters,limit:50},[car],false,'different@example.test',true),id,'equivalent display limit uses the saved search without changing email preferences');

@@ -1,12 +1,14 @@
+import {mileageRequest,applyMileageRequest} from './mileage-range';
 import {record,array} from './unknown-data';
 import {applyLocationText} from './location-command';
 import {filterSchema,type Filters,type Message} from './domain';
 import {detailProperties} from './vehicle-requirements';
 import {basic} from './basic-parser';
-const properties={...detailProperties,make:{type:'string'},model:{type:'string'},trim:{type:'string'},maxPrice:{type:['number','null']},maxMiles:{type:['number','null']},minYear:{type:['number','null']},state:{type:'string'},zip:{type:'string'},radiusMiles:{type:'number'},seller:{type:'string',enum:['any','private','dealer']},awd:{type:'boolean'},cleanTitle:{type:'boolean'},shippingAllowance:{type:'number'},limit:{type:'number'}};
+const properties={...detailProperties,make:{type:'string'},model:{type:'string'},trim:{type:'string'},maxPrice:{type:['number','null']},minMiles:{type:['number','null']},maxMiles:{type:['number','null']},minYear:{type:['number','null']},state:{type:'string'},zip:{type:'string'},radiusMiles:{type:'number'},seller:{type:'string',enum:['any','private','dealer']},awd:{type:'boolean'},cleanTitle:{type:'boolean'},shippingAllowance:{type:'number'},limit:{type:'number'}};
 const instructions=`You translate a user's used-car shopping request into exact inventory requirements. Always call update_search. Never return the user's words as a clarification or merely paraphrase a search: action search actually executes it.
 For a U.S. ZIP location use zip as a five-digit string (preserve leading zeros), state empty, and radiusMiles for distance from the ZIP center. Use 100 miles unless the user specifies another radius. Keep ZIP/radius on follow-ups; clear zip when the user changes to a state or nationwide. Never confuse ZIP codes with budgets or vehicle mileage.
 Engine specifications are supported through requiredTerms: use canonical V8, V6, V10, V12, I4, I6, flat6, 4 cylinder, 6 cylinder, 8 cylinder, supercharged, turbocharged, twin turbo, or naturally aspirated. Preserve every requested engine requirement; do not substitute a model or trim. A supercharged Audi request must leave model empty unless the user specifies a model. Do not guess engine type from TFSI, 3.0T, a badge, or brand. Matching uses provider engine data, seller evidence and curated factory specifications. Ask a clarification for alternatives (V6 OR V8) or exclusions (not turbo) that cannot be represented.
+Mileage ranges must preserve both bounds: '30k to 50k miles' means minMiles 30000 and maxMiles 50000. 'At least 30k miles' sets minMiles 30000. Preserve both mileage bounds on follow-ups; clear both for a new vehicle unless explicitly retained. A reversed range needs clarification. Mileage bounds never represent price, ZIP or distance from a location.
 Support exterior color, body type (truck=pickup), fuel, transmission, drivetrain (4x4=four-wheel-drive=4wd, distinct from awd), cab style, and each listed equipment feature, plus make/model/trim, budget, mileage, oldest year, state, seller, clean title, and shipping reserve.
 Use exteriorColor for exterior paint only. A green truck with black leather has exteriorColor green, bodyType pickup, features leather seats and requiredTerms ["black leather"]. Additional terms need explicit seller evidence; never infer interior color from paint. Never silently omit any must-have. Features and requiredTerms are ALL required, not alternatives. Ask a specific question if an OR choice cannot be represented.
 Carry forward all active requirements on follow-ups such as 'only diesel', 'make it blue', or 'under 60k miles'. A clearly new make/model request such as 'find a green M4' after trucks starts a fresh search: clear previous body type, cab, drivetrain, features, color, budget, mileage, year, seller and location unless the user says to keep them or states them again. Follow-ups about the SAME car keep active requirements. Never carry a truck's crew cab or 4WD requirement into a sports-car search. Set awd false when explicitly requesting 4wd/fwd/rwd, and use drivetrain. If no change was requested, keep the existing value. Do not infer clean title, location, or features from appearance.
@@ -14,7 +16,8 @@ Any make, model and trim may be requested; there is no preset catalogue restrict
 question must be empty for executable searches. Use action clarify only for genuinely missing information or requirements whose meaning needs clarification. For custom equipment, modifications, packages or interior specifications outside named filters, put concise exact seller phrases in requiredTerms, such as "overland", "black leather" or "long bed". These phrases are mandatory and will be checked against seller evidence. Clear requiredTerms on a new vehicle search unless the user keeps them. For numeric performance guarantees or accident-free history without structured evidence, clarify instead. Say which requirement cannot currently be verified and ask whether to search without it. Never run a search that silently discards it. Do not ask users to repeat supported requirements.
 Return the complete filter object, not a patch. All claims about listings come from inventory, never from you.`;
 export async function interpretSearch(text:string,filters:Filters,messages:Message[],options:{apiKey?:string;model?:string;request?:typeof fetch}={}){
- const current=filterSchema.parse(filters);
+ const current=filterSchema.parse(filters),mileage=mileageRequest(text);
+ if(mileage?.question)return {filters:current,question:mileage.question,action:'clarify',mode:options.apiKey?'AI':'Basic filter parser · AI not connected'};
  // Relative mileage needs an existing limit or an explicit amount; model output is not evidence of user intent.
  const relativeMileage=/\b(?:lower|less|fewer|reduce|decrease)\s+(?:the\s+)?(?:mileage|miles)\b|\bmileage\s+(?:lower|less)\b/i.test(text);
  const explicitMileage=/\b\d[\d,.]*\s*k?\s*(?:miles|mi\b)|\b(?:mileage|miles)\s*(?:(?:under|below|to|of|at|max(?:imum)?|limit|is)\s*)*[:=]?\s*\d/i.test(text);
@@ -29,7 +32,13 @@ export async function interpretSearch(text:string,filters:Filters,messages:Messa
  const fn=record(call.function);if(fn.name!=='update_search'||typeof fn.arguments!=='string')throw Error('The assistant did not provide executable search filters. Please retry.');
  const args=JSON.parse(fn.arguments);
  if(!['search','clarify','compare','save','alert'].includes(args.action))throw Error('The assistant returned an invalid action. Your filters are unchanged.');
- const parsed=filterSchema.parse(applyLocationText(text,args.filters));
+ const adjusted=applyLocationText(text,args.filters);
+ const bounded=mileage?applyMileageRequest(adjusted,mileage):adjusted;
+ const sameVehicle=['make','model'].every(key=>String(record(bounded)[key]??'').toLowerCase()===String(record(current)[key]??'').toLowerCase());
+ if(!sameVehicle&&!mileage&&!/\bkeep\b|same (?:budget|limits|requirements)/i.test(text))bounded.minMiles=null;
+ if(sameVehicle&&current.minMiles!==null&&bounded.minMiles==null&&!/\b(?:no|remove|clear)\s+(?:the\s+)?(?:minimum|lower)\s+mileage|\bany mileage\b/i.test(text))bounded.minMiles=current.minMiles;
+ if(bounded.minMiles!==null&&bounded.maxMiles!==null&&bounded.minMiles>bounded.maxMiles)return {filters:current,question:'The minimum mileage is higher than the maximum. Which mileage range should I use?',action:'clarify',mode:'AI'};
+ const parsed=filterSchema.parse(bounded);
  const question=args.action==='clarify'?String(args.question??'').trim().slice(0,600):'';
  if(args.action==='clarify'&&(!question||question.toLowerCase()===text.trim().toLowerCase()))return basic(text,current);
  return {filters:parsed,question,action:args.action,mode:'AI'};

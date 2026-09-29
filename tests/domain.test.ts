@@ -49,3 +49,19 @@ const composite={...oldOffer,offers:[{source:'alternate',url:'https://alternate.
 const alternate={...freshOffer,id:'alternate',source:'alternate',url:'https://alternate.example/car',price:36000};
 assert.equal(deduplicate([composite,alternate])[0].offers!.find(offer=>offer.url===alternate.url)?.price,36000,'fresh alternate offer beats a cheaper composite summary');
 assert.equal(deduplicate([{...freshOffer,offers:[{source:base.source,url:base.url,price:100,fees:null,checkedAt:freshOffer.checkedAt}]}])[0].offers![0].price,34000,'primary offer always reflects the full current record');
+
+const mileageRange=filterSchema.parse({minMiles:30000,maxMiles:40000});
+for(const miles of [30000,35000,40000])assert(matches({...base,miles},mileageRange),'both mileage bounds are inclusive');
+for(const miles of [29999,40001,null])assert(!matches({...base,miles},mileageRange),'outside or unknown mileage cannot pass a range');
+assert(!matches({...base,miles:null},filterSchema.parse({minMiles:0})),'even a zero minimum requires mileage evidence');
+assert(matches({...base,miles:1000000},filterSchema.parse({minMiles:1000000})));
+assert(matches({...base,miles:40000},filterSchema.parse({minMiles:40000,maxMiles:40000})),'equal bounds permit exact mileage');
+assert.equal(filterSchema.parse({maxMiles:40000}).minMiles,null,'legacy saved filters gain an unset minimum');
+assert.equal(filterSchema.parse({make:'ford',model:'f150',minMiles:1000}).model,'F-150','mileage validation preserves vehicle aliases');
+for(const minMiles of [-1,1000001,1.5])assert(!filterSchema.safeParse({minMiles}).success);
+const invertedRange=filterSchema.safeParse({minMiles:40001,maxMiles:40000});
+assert(!invertedRange.success);assert.deepEqual(invertedRange.error.issues[0].path,['minMiles']);assert.match(invertedRange.error.issues[0].message,/Minimum mileage.*maximum mileage/);
+assert(relaxed(mileageRange,{...mileageRange,minMiles:20000}),'lowering a minimum broadens requirements');
+assert(relaxed(mileageRange,{...mileageRange,minMiles:null}),'removing a minimum broadens requirements');
+assert(!relaxed(mileageRange,{...mileageRange,minMiles:35000}),'raising a minimum tightens requirements');
+assert(!relaxed(filterSchema.parse({}),filterSchema.parse({minMiles:1000})),'adding a minimum tightens requirements');

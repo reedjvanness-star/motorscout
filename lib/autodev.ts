@@ -20,7 +20,7 @@ export function autoDevUrl(f:Filters,position='1'){
   if(f.zip){u.searchParams.set('zip',f.zip);u.searchParams.set('distance',String(f.radiusMiles));}
   if(f.state)u.searchParams.set('retailListing.state',f.state);
   if(f.maxPrice!==null)u.searchParams.set('retailListing.price',`1-${Math.max(1,f.maxPrice-f.shippingAllowance)}`);
-  if(f.maxMiles!==null)u.searchParams.set('retailListing.miles',`0-${f.maxMiles}`);
+  if(f.maxMiles!==null)u.searchParams.set('retailListing.miles',`${f.minMiles??0}-${f.maxMiles}`);
   if(f.minYear!==null)u.searchParams.set('vehicle.year',`${f.minYear}-2030`);
   return u;
 }

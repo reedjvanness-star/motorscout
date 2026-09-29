@@ -4,7 +4,7 @@ import {captureSearch,rememberSearch,restorePreviousSearch} from '../lib/search-
 import {normalizeMarketcheck} from '../lib/marketcheck';
 import {encodeWorkspace,decodeWorkspace} from '../lib/workspace-codec';
 const car=(id:string)=>normalizeMarketcheck({id,price:35000,vdp_url:`https://example.test/${id}`,build:{make:'BMW',model:'M4',year:2020},miles:35000},false)!;
-const workspace=blankWorkspace();workspace.filters=filterSchema.parse({make:'BMW'});workspace.poolFilters=workspace.filters;workspace.listings=[car('original')];workspace.collected=[...workspace.listings,car('hidden')];workspace.messages=[{role:'user',text:'Find BMWs',at:1}];workspace.sources=[{name:'CarGurus',status:'searched',count:2,detail:'Original source evidence'}];workspace.searchedAt='2026-09-29T00:00:00Z';workspace.searchId='old-run';workspace.nextCursor={dealer:50,private:null,auction:null,autodev:null};workspace.batch=2;
+const workspace=blankWorkspace();workspace.filters=filterSchema.parse({make:'BMW',minMiles:30000,maxMiles:50000});workspace.poolFilters=workspace.filters;workspace.listings=[car('original')];workspace.collected=[...workspace.listings,car('hidden')];workspace.messages=[{role:'user',text:'Find BMWs',at:1}];workspace.sources=[{name:'CarGurus',status:'searched',count:2,detail:'Original source evidence'}];workspace.searchedAt='2026-09-29T00:00:00Z';workspace.searchId='old-run';workspace.nextCursor={dealer:50,private:null,auction:null,autodev:null};workspace.batch=2;
 workspace.saved=[car('saved')];workspace.compare=['saved'];workspace.comparisonCars=[workspace.saved[0]];
 const original=captureSearch(workspace)!;
 rememberSearch(workspace);

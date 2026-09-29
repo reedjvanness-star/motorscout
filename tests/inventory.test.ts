@@ -137,3 +137,18 @@ for(const filters of [{...initialFilters,seller:'dealer' as const},{...initialFi
  assert.equal(result.sources[2].status,excluded?'unavailable':'searched');
  if(excluded){assert.equal(result.nextCursor?.auction??null,null);assert.match(result.sources[2].detail,/Excluded by your seller or maximum-price filter/);}
 }
+
+for(const privateSeller of [false,true]){
+ assert.equal(marketcheckUrl({...initialFilters,minMiles:10000,maxMiles:20000},privateSeller).searchParams.get('miles_range'),'10000-20000');
+ assert.equal(marketcheckUrl({...initialFilters,maxMiles:20000},privateSeller).searchParams.get('miles_range'),'0-20000');
+ assert(!marketcheckUrl({...initialFilters,minMiles:10000},privateSeller).searchParams.has('miles_range'),'minimum-only mileage remains a local requirement without invented provider bounds');
+ assert.equal(marketcheckUrl({...initialFilters,minMiles:10000,maxMiles:20000},privateSeller).searchParams.get('rows'),'50');
+}
+
+const {autotraderMarketcheckUrl}=await import('../lib/marketcheck');
+const {retailerInventoryUrl}=await import('../lib/retailers');
+for(const builder of [autotraderMarketcheckUrl,retailerInventoryUrl]){
+ const bounded=builder({...initialFilters,minMiles:10000,maxMiles:20000});
+ assert.equal(bounded.searchParams.get('miles_range'),'10000-20000');assert.equal(bounded.searchParams.get('rows'),'10');
+ assert(!builder({...initialFilters,minMiles:10000}).searchParams.has('miles_range'));
+}
