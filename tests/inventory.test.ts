@@ -31,13 +31,13 @@ const mock:typeof fetch=async(input)=>{
 };
 const one=await searchInventory(f,{marketcheck:'test-only',autodev:'test-only'},firstCursor(),mock);
 assert.equal(one.listings.length,50,'no top-12 truncation before local pagination');
-assert.deepEqual(one.nextCursor,{dealer:50,private:null,auction:50,autodev:null,autotrader:null,retailers:null});
-assert.equal(one.sources[0].total,55);assert.equal(calls.length,6);
+assert.deepEqual(one.nextCursor,{dealer:50,private:null,auction:null,autodev:null,autotrader:null,retailers:null});
+assert.equal(one.sources[0].total,55);assert.equal(calls.length,5);
 calls=[];
 const two=await searchInventory(f,{marketcheck:'test-only',autodev:'test-only'},one.nextCursor!,mock);
-assert.equal(two.listings.length,5);assert.equal(two.nextCursor,null);assert.equal(calls.length,2,'exhausted feeds not called again');
+assert.equal(two.listings.length,5);assert.equal(two.nextCursor,null);assert.equal(calls.length,1,'exhausted and filter-excluded feeds not called again');
 const outage=await searchInventory(f,{marketcheck:'test-only'},firstCursor(),async()=>{throw Error('secret upstream error')});
-assert.deepEqual(outage.nextCursor,{dealer:0,private:0,auction:0,autodev:null,autotrader:0,retailers:0});assert(!JSON.stringify(outage).includes('secret upstream'));
+assert.deepEqual(outage.nextCursor,{dealer:0,private:0,auction:null,autodev:null,autotrader:0,retailers:0});assert(!JSON.stringify(outage).includes('secret upstream'));
 const partial=await searchInventory(f,{marketcheck:'test-only'},firstCursor(),async(input,init)=>String(input).includes('fsbo')?new Response('',{status:403}):mock(input,init));
 assert.equal(partial.listings.length,50);assert.equal(partial.sources[1].status,'error');assert.equal(partial.nextCursor?.private,0);
 let skipped=0;await searchInventory({...f,seller:'private'},{autodev:'test'},firstCursor(),async()=>{skipped++;return Response.json({})});assert.equal(skipped,0);
@@ -110,3 +110,30 @@ collectWorkspace(simultaneousPool,[{...primary,price:34000,checkedAt:new Date(Da
 assert.equal(simultaneousPool.listings[0].source,'auto.example');
 assert.equal(simultaneousPool.listings[0].price,32000);
 assert.deepEqual(simultaneousPool.listings[0].photos,['https://images.example/auto.jpg'],'retained alternate supplies its own complete photo provenance');
+
+assert.equal(nextAutoPosition({links:{next:'?page=2'}},'1',20),'2','query-relative next pages resolve against the listings endpoint');
+assert.equal(nextAutoPosition({links:{next:'?cursor=next-token'}},'1',20),'cursor:next-token');
+for(const next of ['?page=51','?page=1','//evil.test/listings?page=2','/other?page=2','https://user:password@api.auto.dev/listings?page=2'])assert.equal(nextAutoPosition({links:{next}},'1',20),null,'relative link support preserves endpoint and page limits');
+const relativeCalls:string[]=[];
+const relativeFetcher:typeof fetch=async input=>{
+ const url=new URL(String(input));relativeCalls.push(url.href);
+ const second=url.searchParams.get('page')==='2';
+ return Response.json({data:[{vehicle:{vin:second?'4S4GUHF63S3720418':'4T1C11AK5PU786764',year:2022,make:'BMW',model:'3 Series'},retailListing:{used:true,price:32000,vdp:`https://auto.example/relative-${second?2:1}`,miles:30000}}],links:{next:second?null:'?page=2'}});
+};
+const relativeFirst=await searchInventory(initialFilters,{autodev:'test'},firstCursor(),relativeFetcher);
+assert.equal(relativeFirst.nextCursor?.autodev,'2','explicit next links survive even a shorter-than-limit page');
+const relativeSecond=await searchInventory(initialFilters,{autodev:'test'},relativeFirst.nextCursor!,relativeFetcher);
+assert.equal(relativeSecond.listings.length,1);assert.equal(relativeSecond.nextCursor,null);
+assert.equal(relativeCalls.length,2);assert.equal(new URL(relativeCalls[1]).pathname,'/listings');assert.equal(new URL(relativeCalls[1]).searchParams.get('page'),'2');
+
+for(const filters of [{...initialFilters,seller:'dealer' as const},{...initialFilters,seller:'private' as const},{...initialFilters,maxPrice:50000},initialFilters]){
+ let auctionCalls=0;
+ const result=await searchInventory(filters,{marketcheck:'test'},firstCursor(),async input=>{
+  if(new URL(String(input)).pathname.includes('/auction/'))auctionCalls++;
+  return Response.json({listings:[],num_found:0});
+ });
+ const excluded=filters.seller!=='any'||filters.maxPrice!==null;
+ assert.equal(auctionCalls,excluded?0:1,'skip auction requests whose unknown seller or purchase price guarantees no exact match');
+ assert.equal(result.sources[2].status,excluded?'unavailable':'searched');
+ if(excluded){assert.equal(result.nextCursor?.auction??null,null);assert.match(result.sources[2].detail,/Excluded by your seller or maximum-price filter/);}
+}

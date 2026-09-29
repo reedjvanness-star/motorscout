@@ -36,7 +36,7 @@ export function nextAutoPosition(input:unknown, current:string, count:number):st
   const next = record(record(input).links).next;
   if (typeof next === 'string') {
     try {
-      const u = new URL(next, 'https://api.auto.dev');
+      const u = new URL(next, 'https://api.auto.dev/listings');
       if(u.origin !== 'https://api.auto.dev' || u.pathname !== '/listings' || u.username || u.password) return null;
       const token=u.searchParams.get('cursor'),page=u.searchParams.get('page');
       if(token && token.length<=4096 && 'cursor:'+token!==current)return 'cursor:'+token;
@@ -54,6 +54,7 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
   async function market(privateSeller:boolean, auction=false) {
     const index=auction?2:privateSeller?1:0,slot=auction?'auction':privateSeller?'private':'dealer',source=sources[index],offset=cursor[slot]??null;
     if(!keys.marketcheck)return;
+    if(auction&&(f.seller!=='any'||f.maxPrice!==null)){source.status='unavailable';source.detail='Excluded by your seller or maximum-price filter: auction seller type and full cash purchase price are unconfirmed.';return;}
     if(!auction&&((f.seller==='private'&&!privateSeller)||(f.seller==='dealer'&&privateSeller))) {source.status='unavailable';source.detail='Excluded by your seller filter.';return;}
     if(offset===null){source.status='searched';source.count=0;source.detail='No further pages from this source in the current search.';return;}
     try {

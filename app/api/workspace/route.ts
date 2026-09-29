@@ -1,3 +1,4 @@
+import {rememberSearch,restorePreviousSearch} from '@/lib/search-history';
 import {resolveZip} from '@/lib/zip-location';
 import {localLocationCommand} from '@/lib/location-command';
 import {localScoutCommand,loadedScoutRefinement} from '@/lib/local-scout-command';
@@ -7,7 +8,7 @@ import {workspaceCars,toggleComparison,collectedCarCount} from '@/lib/shortlist'
 import {alertSnapshot,saveAlert,checkAlert,emailReady} from '@/lib/alerts';
 import {alertSearchKey} from '@/lib/alert-matches';
 import {resolveSearchVehicle} from '@/lib/catalog-server';
-import {healthyCursor,mergeSources,collectWorkspace,refineWorkspace} from '@/lib/search-session';
+import {healthyCursor,preserveDeferredCursor,mergeSources,collectWorkspace,refineWorkspace} from '@/lib/search-session';
 import {applyPriceReview,checkListingPrice} from '@/lib/price-review';
 import {inventoryKeys,connectionStatus,providerKey} from '@/lib/connections';
 import {identity,readWorkspace,writeWorkspace,limitUsage,boundedJson,failure,filterSchema,db} from '@/lib/server';
@@ -27,7 +28,7 @@ else if(parsed.action==='refine'){
 }
 else if(parsed.action==='compare')w.messages.push({role:'assistant',...prepareChatComparison(w,a.text),at:Date.now()});
 else if(parsed.action==='save')reply('Use Save on a recommendation to keep it in Saved cars. I won’t guess which car you meant.');
-else if(parsed.action==='alert')reply('Tap “Notify me” beside your results to save your exact requirements and choose notifications. Manage them under Saved searches.');
+else if(parsed.action==='alert')reply('Tap “Save search” beside your results to save your exact requirements and choose notifications. Manage them under Saved searches.');
 else{w.filters=filterSchema.parse(parsed.filters);search=true;}}
 else if(a.action==='search'){await limitUsage(id);w.filters=filterSchema.parse(a.filters);w.pending=null;search=true;}
 else if(a.action==='nextBatch'){if(!w.nextCursor)throw Error('No further inventory pages are available.');if(a.searchId!==w.searchId)throw Error('Your search changed. Use the latest results.');if(a.cursor!==JSON.stringify(w.nextCursor))throw Error('These results have already advanced. Refresh to continue.');await limitUsage(id+':inventory-pages',5000);search=true;}
@@ -45,7 +46,8 @@ else if(a.action==='cancel'){w.pending=null;reply('Kept your original requiremen
 else if(a.action==='save'){const row=w.listings.find(r=>r.id===a.id)||w.saved.find(r=>r.id===a.id)||w.comparisonCars?.find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!row)throw Error('This listing is no longer in your results.');if(w.saved.some(r=>r.id===row.id)){w.saved=w.saved.filter(r=>r.id!==row.id)}else{if(w.saved.length>=100)throw Error('You can save up to 100 cars.');w.saved.push(row)}}
 else if(a.action==='compare'){const candidate=workspaceCars(w).find(r=>r.id===a.id)||await notifiedCar(id,String(a.id));if(!candidate)throw Error('Listing not found.');toggleComparison(w,candidate)}
 else if(a.action==='resetChat'){w.messages=[];w.pending=null;}
-else if(a.action==='newSearch'){w.filters={...initialFilters};w.messages=[];w.listings=[];w.collected=[];w.poolFilters=undefined;w.sources=[];w.pending=null;w.searchedAt=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;}
+else if(a.action==='restoreSearch'){restorePreviousSearch(w);}
+else if(a.action==='newSearch'){rememberSearch(w);w.filters={...initialFilters};w.messages=[];w.listings=[];w.collected=[];w.poolFilters=undefined;w.sources=[];w.pending=null;w.searchedAt=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;}
 else if(a.action==='saveSearch'){
  const filters=a.filters?filterSchema.parse(a.filters):w.filters;
  if(a.enabled!==undefined&&typeof a.enabled!=='boolean')throw Error('Invalid alert setting.');
@@ -82,7 +84,7 @@ else if(a.action==='deleteAlert'){
   db().prepare('DELETE FROM alerts WHERE id=? AND user_id=?').bind(alertId,id),
  ]);
 }
-else if(a.action==='loadSearch'){const row=await db().prepare('SELECT filters FROM alerts WHERE id=? AND user_id=?').bind(String(a.id),id).first<{filters:string}>();if(!row)throw Error('Saved search not found.');w.filters=filterSchema.parse(JSON.parse(row.filters));w.listings=[];w.collected=[];w.poolFilters=undefined;w.searchedAt=null;w.pending=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;w.sources=[];reply('Saved filters loaded. Press Search to check current listings.');}
+else if(a.action==='loadSearch'){const row=await db().prepare('SELECT filters FROM alerts WHERE id=? AND user_id=?').bind(String(a.id),id).first<{filters:string}>();if(!row)throw Error('Saved search not found.');rememberSearch(w);w.filters=filterSchema.parse(JSON.parse(row.filters));w.listings=[];w.collected=[];w.poolFilters=undefined;w.searchedAt=null;w.pending=null;w.nextCursor=null;w.searchId=crypto.randomUUID();w.batch=0;w.sources=[];reply('Saved filters loaded. Press Search to check current listings.');}
 else throw Error('Unknown action.');
 if(search){
   const access=await connectionStatus(id);
@@ -96,10 +98,11 @@ if(search){
   if(latest.searchId!==w.searchId||(continuing&&JSON.stringify(latest.nextCursor)!==JSON.stringify(w.nextCursor)))throw Error('Your search changed while inventory was loading.');
   w.saved=latest.saved;w.compare=latest.compare;w.comparisonCars=latest.comparisonCars;
   const succeeded=result.sources.some(s=>s.status==='searched'&&s.inspected!==undefined);
-  if(!continuing)w.searchId=crypto.randomUUID();
+  if(!continuing){rememberSearch(w,latest);w.searchId=crypto.randomUUID();}
   const keepLoaded=continuing||a.action==='chat'||a.action==='confirm';
   if(succeeded||!continuing){const retained=keepLoaded?(w.collected??w.listings):[];collectWorkspace(w,[...retained,...(result.records??result.listings)],!continuing);w.batch=continuing?(w.batch??1)+1:1;w.searchedAt=result.checkedAt;}
-  w.sources=continuing?mergeSources(w.sources,result.sources):result.sources;w.nextCursor=result.nextCursor;
+  const nextCursor=continuing&&a.automatic?preserveDeferredCursor(result.nextCursor,w.nextCursor,w.sources):result.nextCursor;
+  w.sources=continuing?mergeSources(w.sources,result.sources):result.sources;w.nextCursor=nextCursor;
   const message=access.apify&&!access.marketcheck&&!access.autodev?'Your requirements are ready. Searching the connected marketplaces next; results may take a few minutes.':!succeeded?'Some inventory sources could not be checked. Your collected cars remain available. Open Sources for details.':`Found ${w.listings.length} matching cars across the inventory checked so far. ${healthyCursor(w.nextCursor,w.sources)?'More inventory pages are available.':'All currently accessible pages for this search have been checked.'} ${w.listings.length<5?'Fewer than five exact matches have been found so far; your requirements have not been relaxed. ':''}Your requested requirements are shown beside the results. Seller prices and equipment still need confirmation.`;
   if(continuing&&w.messages.at(-1)?.role==='assistant')w.messages[w.messages.length-1]={role:'assistant',text:message,ids:w.listings.slice(0,12).map(r=>r.id),at:Date.now()};
   else reply(message,w.listings.slice(0,12).map(r=>r.id));

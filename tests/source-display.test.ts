@@ -7,6 +7,7 @@ assert.equal(sourceDisplay({...unused,name:'Facebook Marketplace'},true,'TX').la
 assert.equal(sourceDisplay({...unused,name:'Newspaper classifieds'},true,'').label,'Not connected');
 assert.equal(sourceDisplay({...unused,status:'error',detail:'HTTP 429 quota limit'},true,'').label,'Provider limit reached');
 assert.equal(sourceDisplay({...unused,status:'searched',count:3},true,'').label,'Listings returned');
+assert.equal(sourceDisplay({...unused,name:'MarketCheck · auctions',detail:'Excluded by your maximum-price filter.'},true,'').label,'Excluded by your filters');
 console.log('PASS: connected marketplaces, missing credentials, regional coverage and provider limits');
 
 for(const name of ['CarMax','AutoTrader'])assert.equal(sourceDisplay({...unused,name},true,'').label,'Not connected');

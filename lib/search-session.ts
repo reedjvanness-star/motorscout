@@ -14,6 +14,15 @@ export function healthyCursor(cursor:SearchCursor|null|undefined,sources:Source[
  }
  return Object.values(next).some(v=>v!==null)?next:null;
 }
+// Background batches skip failed feeds but must retain their position for an
+// explicit retry after the shopper resolves a temporary provider limit.
+export function preserveDeferredCursor(next:SearchCursor|null,previous:SearchCursor|null|undefined,sources:Source[]):SearchCursor|null{
+ const merged:SearchCursor={dealer:null,private:null,auction:null,autodev:null,autotrader:null,retailers:null,...next};
+ for(const slot of Object.keys(cursorSources) as (keyof typeof cursorSources)[]){
+  if(previous?.[slot]!=null&&sources.some(source=>source.name===cursorSources[slot]&&source.status==='error'))Object.assign(merged,{[slot]:previous[slot]});
+ }
+ return Object.values(merged).some(value=>value!==null)?merged:null;
+}
 // Keep complete source records so a later price update can change the winning offer.
 // Legacy composite rows retain only the alternate offer metadata actually stored.
 export function mergeCollected(previous:Listing[],incoming:Listing[],filters:Filters){

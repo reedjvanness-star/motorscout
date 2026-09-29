@@ -147,3 +147,18 @@
 
 /* Familiar browse controls, with full catalogs in searchable dropdowns. */
 .vehicle-picker .input-button{min-height:44px;gap:10px}.vehicle-picker .input-button>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.vehicle-picker .input-button:disabled{opacity:.5;cursor:not-allowed}.vehicle-picker-menu{padding:0!important;width:max(270px,var(--radix-popover-trigger-width));max-width:calc(100vw - 32px);z-index:80}.vehicle-picker-menu [data-slot=command-item]{min-height:40px;cursor:pointer}.vehicle-picker-menu [data-slot=command-input-wrapper]{height:48px}.workspace[data-mode=manual] .search-panel{padding:24px;margin-bottom:22px}.workspace[data-mode=manual] .vehicle-pickers{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.workspace[data-mode=manual] .filter-bottom>button{min-width:170px;height:44px}.vehicle-picker label{font-weight:500}@media(max-width:700px){.workspace[data-mode=manual] .vehicle-pickers{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.workspace[data-mode=manual] .search-panel{padding:18px}.filter-bottom{gap:12px;flex-wrap:wrap}}@media(max-width:440px){.workspace[data-mode=manual] .vehicle-pickers{grid-template-columns:1fr}.workspace[data-mode=manual] .filter-bottom>button{width:100%}}
+
+/* Keep the saved-search action outside its independently scrolling details. */
+.alert-signup-sheet[data-slot=sheet-content]{height:100dvh;max-height:100dvh;overflow:hidden;gap:0}
+.alert-signup-sheet [data-slot=sheet-header]{flex:0 0 auto;padding:24px 52px 20px 24px}
+.alert-signup-sheet .alert-signup{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:16px;padding:8px 24px 24px}
+.alert-signup-sheet .filter-chips{display:flex;flex-wrap:wrap;gap:7px}
+.alert-signup-sheet .alert-toggle{gap:16px;margin:0}
+.alert-signup-sheet .alert-toggle [data-slot=switch]{flex-shrink:0}
+.alert-signup-sheet .alert-signup-footer{flex:0 0 auto;margin:0;padding:16px 24px max(20px,env(safe-area-inset-bottom));border-top:1px solid #e1e5e9;background:#fff;box-shadow:0 -4px 12px #19212b08}
+.alert-signup-sheet .alert-save-button,.alert-signup-sheet .alert-signin{width:100%;min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;background:#e84d2c;color:#fff;border-radius:7px;font-size:15px;font-weight:600}
+.alert-signup-sheet .alert-save-button:disabled{opacity:.6}
+.alert-signup-sheet .alert-signup-error{color:#a82d20;background:#fff0eb;border-radius:6px;padding:10px 12px;font-size:14px;max-height:20dvh;overflow:auto;overflow-wrap:anywhere}
+@media(max-width:620px){.alert-signup-sheet[data-slot=sheet-content]{width:100vw!important}.alert-signup-sheet [data-slot=sheet-header]{padding-top:20px}}
+
+.previous-search-notice{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:14px 0;padding:16px;border:1px solid #cdded5;border-radius:12px;background:#f5faf7}.previous-search-notice>div{flex:1;min-width:180px}.previous-search-notice p{font-size:13px;line-height:1.5;color:#53685c;margin:5px 0 0}.previous-search-notice>button{white-space:normal;min-height:44px}.previous-search-notice>.helper{flex-basis:100%;margin:0}@media(max-width:620px){.previous-search-notice>button{width:100%}}

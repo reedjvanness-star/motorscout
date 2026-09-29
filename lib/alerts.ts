@@ -22,7 +22,7 @@ export async function alertSnapshot(userId:string){
 export async function saveAlert(userId:string,filters:Filters,baseline:Listing[],enabled:boolean,email:string|null,emailEnabled:boolean){
  if(emailEnabled&&(!emailReady()||!email))throw Error('Email alerts are not connected yet. You can save this search for in-app updates.');
  const existing=await db().prepare('SELECT id,filters FROM alerts WHERE user_id=?').bind(userId).all<{id:string;filters:string}>();
- if(existing.results.some(a=>alertSearchKey(filterSchema.parse(JSON.parse(a.filters)))===alertSearchKey(filters)))throw Error('This search is already saved. Manage it under Searches & alerts.');
+ if(existing.results.some(a=>alertSearchKey(filterSchema.parse(JSON.parse(a.filters)))===alertSearchKey(filters)))throw Error('This search is already saved. Manage it under Saved searches.');
  const id=crypto.randomUUID(),now=Date.now();
  const result=await db().batch([
   db().prepare('INSERT INTO alerts(id,user_id,filters,enabled,next_run) SELECT ?,?,?,?,? WHERE (SELECT count(*) FROM alerts WHERE user_id=?)<10 AND NOT EXISTS(SELECT 1 FROM alerts WHERE user_id=? AND filters=?)').bind(id,userId,JSON.stringify(filters),enabled?1:0,now,userId,userId,JSON.stringify(filters)),

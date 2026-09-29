@@ -14,7 +14,8 @@ export type Message={role:'user'|'assistant';text:string;ids?:string[];target?:'
 export function availableComparisonIds(rows:Listing[],ids:string[]){const available=new Set(rows.map(r=>r.id));return [...new Set(ids)].filter(id=>available.has(id));}
 export type SearchCursor={dealer:number|null;private:number|null;auction:number|null;autodev:string|null;autotrader?:number|null;retailers?:number|null};
 export const firstCursor=():SearchCursor=>({dealer:0,private:0,auction:0,autodev:'1',autotrader:0,retailers:0});
-export type Workspace={collected?:Listing[];poolFilters?:Filters;searchId?:string;nextCursor?:SearchCursor|null;batch?:number;filters:Filters;messages:Message[];listings:Listing[];saved:Listing[];compare:string[];comparisonCars?:Listing[];sources:Source[];pending:Filters|null;searchedAt:string|null};
+export type SearchSnapshot={collected?:Listing[];poolFilters?:Filters;searchId?:string;nextCursor?:SearchCursor|null;batch?:number;filters:Filters;messages:Message[];listings:Listing[];sources:Source[];searchedAt:string|null};
+export type Workspace={previousSearch?:SearchSnapshot;collected?:Listing[];poolFilters?:Filters;searchId?:string;nextCursor?:SearchCursor|null;batch?:number;filters:Filters;messages:Message[];listings:Listing[];saved:Listing[];compare:string[];comparisonCars?:Listing[];sources:Source[];pending:Filters|null;searchedAt:string|null};
 export const blankWorkspace=():Workspace=>({filters:{...initialFilters},messages:[],listings:[],saved:[],compare:[],sources:[],pending:null,searchedAt:null});
 export function safeUrl(v:unknown):string|null {
   if(typeof v!=='string')return null;

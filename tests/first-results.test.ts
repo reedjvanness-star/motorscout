@@ -26,6 +26,22 @@ const privateFirst=await firstResults({...initialFilters,seller:'private'},{auto
 assert.equal(calls.length,1);assert(calls[0].includes('/fsbo/'));
 assert.equal(privateFirst.nextCursor?.autodev,null);
 assert.equal(privateFirst.nextCursor?.dealer,null);
+assert.equal(privateFirst.nextCursor?.auction,null,'unknown-seller auctions cannot match private-only searches');
+assert.equal(privateFirst.nextCursor?.autotrader,0,'AutoTrader FSBO remains eligible');
+assert.equal(privateFirst.nextCursor?.retailers,null);
+assert.equal(privateFirst.sources.find(source=>source.name==='MarketCheck · auctions')?.status,'unavailable');
+calls.length=0;await search({...initialFilters,seller:'private'},{autodev:'test',marketcheck:'test'},privateFirst.nextCursor!);
+assert.equal(calls.length,1,'only the eligible deferred AutoTrader feed is requested for private searches');
+for(const filters of [{...initialFilters,seller:'dealer' as const},{...initialFilters,maxPrice:30000}]){
+ const result=await firstResults(filters,{autodev:'test',marketcheck:'test'},search);
+ assert.equal(result.nextCursor?.auction,null,'unconfirmed auction amounts cannot meet budget or seller requirements');
+ assert.equal(result.nextCursor?.autotrader,0);assert.equal(result.nextCursor?.retailers,0);
+}
+const reordered=await firstResults(initialFilters,{autodev:'test',marketcheck:'test'},async(f,k,c)=>{const result=await searchInventory(f,k,c,async()=>new Response('',{status:429}));return {...result,sources:result.sources.reverse()}});
+assert.equal(reordered.sources.find(source=>source.name==='Auto.dev · dealer inventory')?.status,'error','deferred status updates cannot overwrite the failed selected feed');
+assert.equal(reordered.sources.find(source=>source.name==='MarketCheck · dealer inventory')?.status,'ready');
+assert.equal(healthyCursor(reordered.nextCursor,reordered.sources)?.autodev,null);
+assert.equal(healthyCursor(reordered.nextCursor,reordered.sources)?.dealer,0);
 calls.length=0;
 const only=await firstResults(initialFilters,{autodev:'test'},search);
 assert.equal(only.nextCursor,null,'do not queue unconfigured sources');

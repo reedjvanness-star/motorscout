@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {healthyCursor,mergeSearch,mergeSources} from '../lib/search-session';
+import {healthyCursor,preserveDeferredCursor,mergeSearch,mergeSources} from '../lib/search-session';
 import {encodeWorkspace,decodeWorkspace} from '../lib/workspace-codec';
 import {initialFilters,filterSchema,firstCursor,rank} from '../lib/domain';
 import {normalizeMarketcheck,marketcheckUrl} from '../lib/marketcheck';
@@ -23,6 +23,17 @@ const reordered=inventoryStatus({marketcheck:'fixture',autodev:'fixture'}).rever
 for(const source of reordered)if(['Auto.dev · dealer inventory','MarketCheck · private sellers','CarGurus'].includes(source.name))source.status='error';
 const healthy=healthyCursor(firstCursor(),reordered)!;
 assert.equal(healthy.autodev,null);assert.equal(healthy.private,null);
+const partial={dealer:50,private:null,auction:null,autodev:'2',autotrader:null,retailers:null};
+const limitedSources=inventoryStatus({marketcheck:'fixture',autodev:'fixture'});
+limitedSources.find(source=>source.name==='MarketCheck · dealer inventory')!.status='error';
+const deferred=preserveDeferredCursor({...partial,dealer:null,autodev:'3'},partial,limitedSources)!;
+assert.equal(deferred.dealer,50,'background progress preserves the failed dealer page for manual retry');
+assert.equal(deferred.autodev,'3','healthy source advances normally');
+assert.equal(healthyCursor(deferred,limitedSources)?.dealer,null,'preserving a retry does not automatically repeat failed requests');
+const onlyRetry=preserveDeferredCursor(null,deferred,limitedSources)!;
+assert.equal(onlyRetry.dealer,50);assert.equal(onlyRetry.autodev,null);
+assert.equal(healthyCursor(onlyRetry,limitedSources),null,'automatic gathering ends when only blocked feeds remain');
+assert.equal(preserveDeferredCursor(null,partial,[]),null,'exhausted healthy feeds are not resurrected');
 assert.equal(healthy.dealer,firstCursor().dealer,'unrelated marketplace failures cannot stop healthy dealer pagination');
 assert.equal(healthy.auction,firstCursor().auction);assert.equal(healthy.autotrader,firstCursor().autotrader);assert.equal(healthy.retailers,firstCursor().retailers);
 const marketplaceEvidence=[{name:'CarGurus',status:'searched' as const,detail:'17 marketplace listings returned',count:17,inspected:17},{name:'Carvana',status:'searched' as const,detail:'Independent Apify import',count:2,inspected:2},{name:'Cars.com',status:'error' as const,detail:'No usable listings returned'}];

@@ -12,14 +12,21 @@ export async function firstResults(filters:Filters,keys:InventoryKeys,search:typ
  const result=await search(filters,keys,cursor);
  const next:SearchCursor={dealer:null,private:null,auction:null,autodev:null,autotrader:null,retailers:null,...result.nextCursor};
  const status=inventoryStatus(keys);
- const slots=['dealer','private','auction','autodev','autotrader','retailers'] as const;
- for(const [i,pending] of slots.entries()){
+ const sourcesBySlot={dealer:'MarketCheck · dealer inventory',private:'MarketCheck · private sellers',auction:'MarketCheck · auctions',autodev:'Auto.dev · dealer inventory',autotrader:'AutoTrader',retailers:'MarketCheck · additional retailers'} as const;
+ for(const pending of Object.keys(sourcesBySlot) as (keyof typeof sourcesBySlot)[]){
   if(pending===slot)continue;
-  const eligible=pending==='autodev'?!!keys.autodev&&filters.seller!=='private':!!keys.marketcheck&&!(pending==='dealer'&&filters.seller==='private')&&!(pending==='private'&&filters.seller==='dealer')&&!(pending==='retailers'&&filters.seller==='private');
+  const eligible=pending==='autodev'?!!keys.autodev&&filters.seller!=='private':!!keys.marketcheck&&!(pending==='dealer'&&filters.seller==='private')&&!(pending==='private'&&filters.seller==='dealer')&&!(pending==='retailers'&&filters.seller==='private')&&!(pending==='auction'&&(filters.seller!=='any'||filters.maxPrice!==null));
   if(pending==='autodev')next.autodev=eligible?start.autodev:null;
   else next[pending]=eligible?start[pending]??null:null;
-  if(eligible)result.sources[i]={...status[i],detail:'Waiting for the next background batch. First results are shown while more sources are checked.'};
+  const index=result.sources.findIndex(source=>source.name===sourcesBySlot[pending]),baseline=status.find(source=>source.name===sourcesBySlot[pending]);
+  if(index>=0&&baseline){
+   if(eligible)result.sources[index]={...baseline,detail:'Waiting for the next background batch. First results are shown while more sources are checked.'};
+   else if(pending==='auction'&&keys.marketcheck)result.sources[index]={...baseline,status:'unavailable',detail:'Excluded by your seller or maximum-price filter: auction seller identity and final purchase price are unconfirmed.'};
+  }
  }
- if(next.retailers!==null)for(let i=6;i<result.sources.length;i++)if(status[i].status==='ready')result.sources[i]=status[i];
+ if(next.retailers!==null){
+  const cursorNames=new Set<string>(Object.values(sourcesBySlot));
+  result.sources=result.sources.map(source=>{const baseline=status.find(row=>row.name===source.name);return !cursorNames.has(source.name)&&baseline?.status==='ready'?baseline:source});
+ }
  return {...result,nextCursor:Object.values(next).some(value=>value!==null)?next:null};
 }

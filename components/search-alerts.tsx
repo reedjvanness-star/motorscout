@@ -2,15 +2,36 @@
 import {Bell,Check,LoaderCircle} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Switch} from '@/components/ui/switch';
-import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription} from '@/components/ui/sheet';
+import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription,SheetFooter} from '@/components/ui/sheet';
 import {useState,useEffect} from 'react';
 import {money,type Listing,type Filters} from '@/lib/domain';
 import type {WorkspaceAction} from '@/lib/client-contract';
 export type SavedAlert={id:string;filters:string;enabled:number;last_run:number|null;next_run:number;results:string|null;email_enabled:number|null;last_error:string|null};
 export type MatchNotification={id:string;alert_id:string;cars:string;created_at:number;read_at:number|null};
-export function AlertSignup({open,onOpenChange,labels,signedIn,scheduler,emailReady,busy,onSave}:{open:boolean;onOpenChange:(v:boolean)=>void;labels:string[];signedIn:boolean;scheduler:boolean;emailReady:boolean;busy:boolean;onSave:(email:boolean)=>Promise<void>}){
- const [email,setEmail]=useState(false);
- return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent className="filter-sheet"><SheetHeader><SheetTitle>{scheduler?"Let Scout keep looking":"Save this search"}</SheetTitle><SheetDescription>Keep your exact requirements together and see which notification options are available.</SheetDescription></SheetHeader><div className="sheet-body alert-signup"><div className="filter-chips">{labels.map(t=><span className="filter-chip" key={t}>{t}</span>)}</div><p>Matches appear in your MotorScout inbox. Your color, trim, budget and other requirements stay as you set them.</p>{!scheduler&&<p className="notice">Automatic checks are awaiting an approved inventory feed and an active scheduler. Save your request now, or reuse its filters in a regular search.</p>}<label className="alert-toggle"><Switch checked={email&&emailReady} disabled={!emailReady||busy} onCheckedChange={setEmail}/>Also email my account address when new matches appear</label>{!emailReady&&<p className="helper">Email delivery isn’t available yet. Your search can still be saved.</p>}<p className="helper">Checks cover available connected inventory, not every listing on the web. You can pause or remove the search anytime.</p>{signedIn?<Button disabled={busy} onClick={()=>void onSave(email&&emailReady)}>{busy?<LoaderCircle className="spin"/>:<Bell/>}{scheduler?'Notify me about matches':'Save search'}</Button>:<a className="alert-signin" href="/signin-with-chatgpt?return_to=/%3Ftab%3Dalerts" target="_top">Join / sign in with ChatGPT</a>}</div></SheetContent></Sheet>;
+export function AlertSignup({open,onOpenChange,labels,signedIn,scheduler,emailReady,busy,error,onSave}:{open:boolean;onOpenChange:(v:boolean)=>void;labels:string[];signedIn:boolean;scheduler:boolean;emailReady:boolean;busy:boolean;error?:string;onSave:(email:boolean)=>Promise<void>}){
+ const [email,setEmail]=useState(false),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
+ const pending=busy||saving;
+ async function save(){
+  if(pending)return;
+  setSaveError('');setSaving(true);
+  try{await onSave(email&&emailReady)}catch(cause){setSaveError(cause instanceof Error?cause.message:'Your search could not be saved. Please try again.')}finally{setSaving(false)}
+ }
+ return <Sheet open={open} onOpenChange={onOpenChange}>
+  <SheetContent className="filter-sheet alert-signup-sheet">
+   <SheetHeader><SheetTitle>Save this search</SheetTitle><SheetDescription>Keep these exact filters in Saved searches.</SheetDescription></SheetHeader>
+   <div className="sheet-body alert-signup">
+    <div className="filter-chips">{labels.length?labels.map(t=><span className="filter-chip" key={t}>{t}</span>):<span className="helper">All used cars · no extra filters</span>}</div>
+    <p>{scheduler?'New matches from available connected inventory appear in your inbox.':'Save now and reuse these filters anytime. Automatic checks are not active yet.'}</p>
+    <label className="alert-toggle"><span>Email new matches</span><Switch checked={email&&emailReady} disabled={!emailReady||pending} onCheckedChange={setEmail}/></label>
+    {!emailReady&&<p className="helper">Email is not available yet. You can still save this search.</p>}
+    <p className="helper">Your filters stay unchanged. You can remove the saved search anytime.</p>
+   </div>
+   <SheetFooter className="alert-signup-footer">
+    {(error||saveError)&&<p className="alert-signup-error" role="alert">{error||saveError}</p>}
+    {signedIn?<Button className="alert-save-button" disabled={pending} onClick={()=>void save()}>{pending?<LoaderCircle className="spin"/>:<Bell/>}{saving?'Saving…':'Save search'}</Button>:<a className="alert-signin" href="/signin-with-chatgpt?return_to=/%3Ftab%3Dalerts" target="_top">Sign in to save search</a>}
+   </SheetFooter>
+  </SheetContent>
+ </Sheet>;
 }
 export function SearchAlerts({alerts,notifications,scheduler,emailReady,busy,labels,onAction,onOpen,onSave}:{alerts:SavedAlert[];notifications:MatchNotification[];scheduler:boolean;emailReady:boolean;busy:boolean;labels:(filters:Filters)=>string[];onAction:(a:WorkspaceAction)=>Promise<unknown>;onOpen:(car:Listing)=>void;onSave:()=>void}){
  const [now,setNow]=useState(0);
