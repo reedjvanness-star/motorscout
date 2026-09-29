@@ -1,3 +1,4 @@
+import {canonicalListingVehicle} from './vehicle-identity';
 import {record, array} from './unknown-data';
 import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
@@ -77,12 +78,12 @@ export function normalizeMarketplace(input:unknown):Listing|null{
  const vin=/^[A-HJ-NPR-Z0-9]{17}$/i.test(string(x.vehicleIdentificationNumber))?string(x.vehicleIdentificationNumber).toUpperCase():null;
  const address=record(record(x.itemLocation).address);
  const warning=payment?'This amount may be a payment or deposit. Full purchase price is unconfirmed.':priceWarning(price,year);
- return {id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
+ return canonicalListingVehicle<Listing>({id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
  postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(record(record(x.itemLocation).geo).latitude,record(record(x.itemLocation).geo).longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photoUrls(x.image)[0]??null,photosSourceUrl:url,photos:photoUrls(x.image),
  exteriorColor:string(host==='craigslist.org'?record(x.additionalProperties).exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType)==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
  engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...(Array.isArray(x.features)?array(x.features).map(v=>string(record(v).name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||record(offer.seller)['@type']==='AutoDealer'||record(x.seller)['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
  titleStatus:['clean','rebuilt','salvage'].includes(string(x.titleStatus))?string(x.titleStatus) as Listing['titleStatus']:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
- checkedAt:new Date().toISOString(),sourceUpdatedAt:string(x.datePosted)||null,concerns:['Marketplace listing retrieved through Apify; confirm price, fitted equipment and availability with the seller.'],comparables:[],median:null,reason:'',total:price};
+ checkedAt:new Date().toISOString(),sourceUpdatedAt:string(x.datePosted)||null,concerns:['Marketplace listing retrieved through Apify; confirm price, fitted equipment and availability with the seller.'],comparables:[],median:null,reason:'',total:price});
 }
 export class MarketplaceError extends Error {}
 export async function apifyRequest(key:string,path:string,init:RequestInit={},request:typeof fetch=fetch){

@@ -3,15 +3,15 @@ import {requestedEngineTerms,engineTerm} from './engine-specs';
 import {applyLocationText} from './location-command';
 import {initialFilters,filterSchema,type Filters} from './domain';
 import {vehicles,curatedVehicles,states} from './vehicle-options';
-import {normalizeMercedesText,normalizeAudiText,vehicleNameKey} from './vehicle-identity';
+import {normalizeMercedesText,normalizeAudiText,normalizeBmwText,vehicleNameKey} from './vehicle-identity';
 import {bodyType,cabStyle,knownFeatures} from './vehicle-requirements';
 const norm=(s:string)=>s.toLowerCase().replace(/-/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const has=(text:string,part:string)=>(' '+norm(text)+' ').includes(' '+norm(part)+' ');
 const number=(s:string)=>Number(s.replace(/,/g,'').replace(/k$/i,''))*(/k$/i.test(s)?1000:1);
-export function basic(text:string,old:Filters){text=normalizeAudiText(normalizeMercedesText(text));const f=filterSchema.parse(old);let question='';const t=text.toLowerCase();let action='search',recognized=false;
+export function basic(text:string,old:Filters){text=normalizeBmwText(normalizeAudiText(normalizeMercedesText(text)));const f=filterSchema.parse(old);let question='';const t=text.toLowerCase();let action='search',recognized=false;
 const make=Object.keys(vehicles).find(m=>has(text,m));if(make){if(make!==old.make&&!/\bkeep\b|same (?:budget|limits|requirements)/i.test(text))Object.assign(f,initialFilters);f.make=make;if(make!==old.make){f.model='';f.trim=''}recognized=true}
 const candidates=Object.entries(make?vehicles:curatedVehicles).filter(([m])=>!make||make===m).flatMap(([m,models])=>Object.entries(models).flatMap(([model,trims])=>[{make:m,model,trim:'',term:model},...trims.filter(trim=>trim.length>=4&&!['base','premium','limited','sport','touring','platinum','select','signature','preferred','premium plus','prestige','performance','standard range plus','long range','technology','advance','a-spec','momentum','inscription','r-design'].includes(trim.toLowerCase())).map(trim=>({make:m,model,trim,term:trim}))]));
-const exact=candidates.filter(c=>has(text,c.term));const unique=exact.filter(c=>!exact.some(x=>x.term.length>c.term.length&&has(x.term,c.term)));
+const exact=candidates.filter(c=>has(text,c.term));const unique=exact.filter(c=>!exact.some(x=>(x.term.length>c.term.length&&has(x.term,c.term))||(!c.trim&&!!x.trim&&x.make===c.make&&x.model===c.model)));
 const preferred=unique.filter(c=>!f.make||c.make===f.make);const matched=preferred.length?preferred:unique;if(matched.length===1){if((matched[0].make!==old.make||matched[0].model!==old.model)&&!/\bkeep\b|same (?:budget|limits|requirements)/i.test(text))Object.assign(f,initialFilters);f.make=matched[0].make;f.model=matched[0].model;f.trim=matched[0].trim;recognized=true}else if(matched.length>1){question='Which model do you mean? Choose it in Use filters so I keep the right vehicle.'}
 const body=bodyType(t);if(body){f.bodyType=body as Filters['bodyType'];recognized=true;if(!matched.length&&body!==old.bodyType){f.model='';f.trim='';f.cabStyle='';if(!make)f.make=''}}
 const engines=requestedEngineTerms(t);if(engines.length){f.requiredTerms=[...f.requiredTerms.filter(x=>!engineTerm(x)),...engines];recognized=true;if(/\bor\b|\bnot\b|\bwithout\b/.test(t))question='Which single engine configuration should I require? Engine alternatives and exclusions need clarification.'}

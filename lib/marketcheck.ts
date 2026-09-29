@@ -1,3 +1,4 @@
+import {canonicalListingVehicle} from './vehicle-identity';
 import {record, array} from './unknown-data';
 import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
@@ -73,7 +74,7 @@ export function normalizeMarketcheck(input:unknown, privateSeller: boolean): Lis
     : x.price_includes_fees === false ? `The provider reports $${disclosedFees} in additional fees.`
     : `The provider reports $${disclosedFees} in fees but does not say whether they are included in the asking price.`);
   if (x.carfax_clean_title === true) concerns.push('Clean title is reported by the listing provider. Verify the vehicle history independently.');
-  return {
+  return canonicalListingVehicle<Listing>({
     id: `marketcheck:${String(x.id ?? url)}`, vin: typeof x.vin === 'string' ? x.vin : null,
     title, make: String(b.make ?? ''), model: String(b.model ?? ''), trim: String(b.trim ?? ''),
     engineText:providerEngineText(b.engine,{cylinders:b.cylinders,configuration:b.engine_configuration,engine_block:b.engine_block,aspiration:b.engine_aspiration??b.induction}),evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?array(x.features).map(v=>String(record(v).name??v)):[])].join('\n'),exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(record(x.extra).features)?record(x.extra).features as unknown[]:[])]),
@@ -85,5 +86,5 @@ export function normalizeMarketcheck(input:unknown, privateSeller: boolean): Lis
     titleStatus: x.carfax_clean_title === true ? 'clean' : 'unknown', condition: 'used', history: 'unknown',
     fees, checkedAt: new Date().toISOString(), sourceUpdatedAt: typeof x.last_seen_at_date === 'string' ? x.last_seen_at_date : null,
     concerns, comparables: [], median: null, reason: '', total: price + (fees ?? 0),
-  };
+  });
 }
