@@ -1,7 +1,7 @@
 // GitHub-issued tokens are accepted only for this deployment's configured repository and workflow.
 const issuer='https://token.actions.githubusercontent.com';
 const workflow='.github/workflows/saved-search-alerts.yml@refs/heads/main';
-type Settings=Record<string,any>;
+type Settings=Record<string,unknown>;
 export function schedulerConfigured(settings:Settings){return !!settings.SCHEDULER_SECRET||!!(settings.SCHEDULER_GITHUB_REPOSITORY&&settings.SCHEDULER_GITHUB_REPOSITORY_ID&&settings.SCHEDULER_GITHUB_OWNER_ID&&settings.SCHEDULER_AUDIENCE)}
 function bytes(value:string){if(!/^[A-Za-z0-9_-]+$/.test(value))throw Error('Invalid encoding');return Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))}
 function decode(value:string){return JSON.parse(new TextDecoder().decode(bytes(value)))}

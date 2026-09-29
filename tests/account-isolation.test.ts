@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {DatabaseSync} from 'node:sqlite';
+import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
 import {mkdtemp,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -11,18 +11,19 @@ const {build}=createRequire(require.resolve('wrangler/package.json'))('esbuild')
 const sql=new DatabaseSync(':memory:');
 for(const name of (await readdir('drizzle')).filter(n=>n.endsWith('.sql')).sort())sql.exec(await readFile(join('drizzle',name),'utf8'));
 class Statement{
- values:any[]=[];constructor(public query:string){}
- bind(...values:any[]){this.values=values;return this}
+ values:SQLInputValue[]=[];constructor(public query:string){}
+ bind(...values:SQLInputValue[]){this.values=values;return this}
  async first(){return sql.prepare(this.query).get(...this.values)??null}
  async all(){return {results:sql.prepare(this.query).all(...this.values)}}
  async run(){const r=sql.prepare(this.query).run(...this.values);return {meta:{changes:Number(r.changes)}}}
 }
 const fixture={env:{DB:{prepare:(query:string)=>new Statement(query)},CONNECTION_ENCRYPTION_KEY:Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64')}};
-(globalThis as any).__isolationFixture=fixture;
+const fixtureGlobal=globalThis as typeof globalThis & {__isolationFixture?:typeof fixture};
+fixtureGlobal.__isolationFixture=fixture;
 const dir=await mkdtemp(join(tmpdir(),'motorscout-isolation-'));
 try{
  const file=join(dir,'isolation.mjs');
- await build({stdin:{contents:'export * from "./lib/server";export * from "./lib/connections";',resolveDir:process.cwd()},outfile:file,bundle:true,platform:'node',format:'esm',plugins:[{name:'fixture-env',setup(b:any){
+ await build({stdin:{contents:'export * from "./lib/server";export * from "./lib/connections";',resolveDir:process.cwd()},outfile:file,bundle:true,platform:'node',format:'esm',plugins:[{name:'fixture-env',setup(b:{onResolve(options:{filter:RegExp},callback:()=>{path:string;namespace:string}):void;onLoad(options:{filter:RegExp;namespace?:string},callback:()=>{contents:string}):void}){
  b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'runtime',namespace:'fixture'}));
  b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const env=globalThis.__isolationFixture.env;'}));
  }}]});
@@ -51,4 +52,4 @@ try{
  assert.equal((await api.readWorkspace('alice')).messages[0].text,'Private test request');
  assert(!JSON.stringify(await api.connectionStatus('alice')).includes('alice-fixture'));
  console.log('PASS: fresh accounts, credential isolation, encrypted owner binding, workspace separation and request origin');
-}finally{sql.close();delete (globalThis as any).__isolationFixture;await rm(dir,{recursive:true,force:true})}
+}finally{sql.close();delete fixtureGlobal.__isolationFixture;await rm(dir,{recursive:true,force:true})}

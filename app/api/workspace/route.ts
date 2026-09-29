@@ -13,10 +13,10 @@ import {inventoryKeys,connectionStatus,providerKey} from '@/lib/connections';
 import {identity,readWorkspace,writeWorkspace,limitUsage,boundedJson,failure,filterSchema,db} from '@/lib/server';
 import {sourceStatus,searchListings} from '@/lib/sources';
 import {interpret} from '@/lib/assistant';
-import {initialFilters} from '@/lib/domain';
+import {initialFilters,type Listing} from '@/lib/domain';
 export const dynamic='force-dynamic';
 async function snapshot(id:string){const workspace=await readWorkspace(id),connections=await connectionStatus(id);const sources=withMarketplaceAccess(sourceStatus(await inventoryKeys(id)),connections);workspace.sources=withMarketplaceAccess(workspace.sources.length?workspace.sources:sources,connections);return {workspace,...await alertSnapshot(id),ai:!!await providerKey(id,'openai'),sources,connections}}
-async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>JSON.parse(n.cars)).find((r:any)=>r.id===carId)}
+async function notifiedCar(userId:string,carId:string){const rows=await db().prepare('SELECT cars FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 50').bind(userId).all<{cars:string}>();return rows.results.flatMap(n=>(JSON.parse(n.cars) as Listing[])).find((r)=>r.id===carId)}
 export async function GET(req:Request){try{return Response.json(await snapshot(identity(req)),{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
 export async function POST(req:Request){try{const id=identity(req),a=await boundedJson(req),w=await readWorkspace(id);const reply=(text:string,ids?:string[])=>w.messages.push({role:'assistant',text,ids,at:Date.now()});let search=false;
 if(a.action==='chat'){if(typeof a.text!=='string'||!a.text.trim()||a.text.length>2000)throw Error('Please use a message of 1–2,000 characters.');await limitUsage(id);const command=localScoutCommand(a.text);const parsed=command?{action:command,filters:w.filters,question:''}:loadedScoutRefinement(a.text,w)??localLocationCommand(a.text,w.filters)??await interpret(a.text,w.filters,w.messages,await providerKey(id,'openai'));w.messages.push({role:'user',text:a.text,at:Date.now()});w.pending=null;

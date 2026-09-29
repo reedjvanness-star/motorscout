@@ -1,3 +1,4 @@
+import {record} from '@/lib/unknown-data';
 import {locateListings} from '@/lib/zip-location';
 import {identity,db,readWorkspace,writeWorkspace,boundedJson,failure} from '@/lib/server';
 import {reserveBetaSearch} from '@/lib/shared-marketplace';
@@ -50,10 +51,10 @@ export async function POST(req:Request){try{
  if(a.action!=='poll')throw Error('Unknown marketplace action.');
  if(job?.searchId===w.searchId&&job.state==='IMPORTED')return Response.json({done:true,state:'IMPORTED',hasMore:hasMore(job)});
  if(!job||job.searchId!==w.searchId||!job.runId)return Response.json({done:job?.state==='FAILED',state:job?.state??'NOT_STARTED'});
- const {data}=await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId));
- if(data?.actId!==actor)throw Error('Unexpected marketplace job.');
+ const data=record(record(await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId))).data);
+ if(data.actId!==actor||typeof data.status!=='string')throw Error('Unexpected marketplace job.');
  const done=terminal(data.status);
- const raw=data.defaultDatasetId?await apifyRequest(key,`datasets/${encodeURIComponent(data.defaultDatasetId)}/items?format=json&clean=true&limit=100`):[];
+ const raw=data.defaultDatasetId?await apifyRequest(key,`datasets/${encodeURIComponent(String(data.defaultDatasetId))}/items?format=json&clean=true&limit=100`):[];
  if(!Array.isArray(raw))throw Error('Invalid marketplace inventory response.');
  const unlocated=raw.map(facebook?normalizeFacebook:normalizeMarketplace).filter((r:Listing|null):r is Listing=>r!==null).map(row=>({...row,checkedAt:new Date(job!.startedAt).toISOString()}));
  const rows=await locateListings(unlocated,w.filters);

@@ -1,3 +1,4 @@
+import {record} from './unknown-data';
 import {discountRisk,checkedFullPrice} from './price-safety';
 import {retailers,retailerInventoryUrl,normalizeRetailer} from './retailers';
 import {applyPriceReview,checkListingPrice,canCheckListingPrice} from './price-review';
@@ -30,8 +31,8 @@ export function inventoryStatus(keys: InventoryKeys): Source[] {
 }
 
 // Store only a provider cursor, never a URL to which credentials could be sent.
-export function nextAutoPosition(data:any, current:string, count:number):string|null {
-  const next = data.links?.next;
+export function nextAutoPosition(input:unknown, current:string, count:number):string|null {
+  const next = record(record(input).links).next;
   if (typeof next === 'string') {
     try {
       const u = new URL(next, 'https://api.auto.dev');
@@ -58,9 +59,9 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
       const url=marketcheckUrl(f,privateSeller,offset,auction);url.searchParams.set('api_key',keys.marketcheck);
       const response=await request(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});
       if(!response.ok)throw new ProviderFailure(response.status);
-      const data:any=await response.json();
+      const data=record(await response.json());
       if(!Array.isArray(data.listings))throw Error('Unexpected response');
-      groups[index]=data.listings.map((r:any)=>{let row=normalizeMarketcheck(r,privateSeller);if(row){row={...row,cabStyle:row.cabStyle||f.cabStyle,features:[...new Set([...(row.features??[]),...(f.features??[])])],concerns:[...row.concerns,...(f.features?.length||f.cabStyle?['Cab and requested equipment are matched by the inventory provider’s search filters; verify fitted equipment with the seller.']:[])]}}return auction&&row?{...row,id:`auction:${row.id}`,seller:'unknown' as const,priceWarning:'Auction amount: this may be a bid rather than a purchase price. Confirm sale terms, buyer fees, and the final price with the auction seller.',concerns:[...row.concerns,'Auction listing: bid or sale terms are not a confirmed cash purchase price.']}:row}).filter((r:Listing|null):r is Listing=>r!==null);
+      groups[index]=data.listings.map((r:unknown)=>{let row=normalizeMarketcheck(r,privateSeller);if(row){row={...row,cabStyle:row.cabStyle||f.cabStyle,features:[...new Set([...(row.features??[]),...(f.features??[])])],concerns:[...row.concerns,...(f.features?.length||f.cabStyle?['Cab and requested equipment are matched by the inventory provider’s search filters; verify fitted equipment with the seller.']:[])]}}return auction&&row?{...row,id:`auction:${row.id}`,seller:'unknown' as const,priceWarning:'Auction amount: this may be a bid rather than a purchase price. Confirm sale terms, buyer fees, and the final price with the auction seller.',concerns:[...row.concerns,'Auction listing: bid or sale terms are not a confirmed cash purchase price.']}:row}).filter((r:Listing|null):r is Listing=>r!==null);
       const total=typeof data.num_found==='number'&&Number.isFinite(data.num_found)&&data.num_found>=0?data.num_found:undefined;
       const following=offset+data.listings.length;
       const more=data.listings.length>0&&(total!==undefined?following<total:data.listings.length===MARKETCHECK_PAGE_SIZE);
@@ -83,7 +84,7 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
     try {
       const response=await request(autoDevUrl(f,position),{headers:{Authorization:`Bearer ${keys.autodev}`,Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});
       if(!response.ok)throw new ProviderFailure(response.status);
-      const data:any=await response.json();if(!Array.isArray(data.data))throw Error('Unexpected response');
+      const data=record(await response.json());if(!Array.isArray(data.data))throw Error('Unexpected response');
       groups[3]=data.data.map(normalizeAutoDev).filter((r:Listing|null):r is Listing=>r!==null);
       next.autodev=nextAutoPosition(data,position,data.data.length);
       source.status='searched';source.count=groups[3].length;source.inspected=data.data.length;source.hasMore=next.autodev!==null;
@@ -100,7 +101,7 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
       const url=autotraderMarketcheckUrl(f,offset);url.searchParams.set('api_key',keys.marketcheck);
       const response=await request(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});
       if(!response.ok)throw new ProviderFailure(response.status);
-      const data:any=await response.json();if(!Array.isArray(data.listings))throw Error('Unexpected response');
+      const data=record(await response.json());if(!Array.isArray(data.listings))throw Error('Unexpected response');
       groups[4]=data.listings.map(normalizeAutotraderMarketcheck).filter((r:Listing|null):r is Listing=>r!==null);
       const total=typeof data.num_found==='number'&&Number.isFinite(data.num_found)&&data.num_found>=0?data.num_found:undefined;
       const following=offset+data.listings.length,more=data.listings.length>0&&(total===undefined?data.listings.length===10:following<total);
@@ -117,7 +118,7 @@ export async function searchInventory(f:Filters, keys:InventoryKeys, cursor:Sear
       const url=retailerInventoryUrl(f,offset);url.searchParams.set('api_key',keys.marketcheck);
       const response=await request(url,{headers:{Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});
       if(!response.ok)throw new ProviderFailure(response.status);
-      const data:any=await response.json();if(!Array.isArray(data.listings))throw Error('Unexpected response');
+      const data=record(await response.json());if(!Array.isArray(data.listings))throw Error('Unexpected response');
       groups[5]=data.listings.map(normalizeRetailer).filter((r:Listing|null):r is Listing=>r!==null);
       const total=typeof data.num_found==='number'&&Number.isFinite(data.num_found)&&data.num_found>=0?data.num_found:undefined;
       const following=offset+data.listings.length,more=data.listings.length>0&&(total===undefined?data.listings.length===10:following<total);

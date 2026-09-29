@@ -1,3 +1,4 @@
+import {record, array} from './unknown-data';
 import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
 import {knownFeatures} from './vehicle-requirements';
@@ -39,13 +40,14 @@ export function autotraderMarketcheckUrl(f:Filters,offset=0){
  url.searchParams.delete('high_value_features');url.searchParams.delete('carfax_clean_title');
  return url;
 }
-export function normalizeAutotraderMarketcheck(x:any):Listing|null{
+export function normalizeAutotraderMarketcheck(input:unknown):Listing|null{
+ const x=record(input);
  const url=safeUrl(x?.vdp_url);if(!url)return null;
  const u=new URL(url);if(!['autotrader.com','www.autotrader.com'].includes(u.hostname)||!/^\/cars-for-sale\/vehicle\/\d+\/?$/.test(u.pathname)||x.inventory_type!=='used')return null;
- const category=String(x.mc_dealership?.mc_category??'').toUpperCase();
+ const category=String(record(x.mc_dealership).mc_category??'').toUpperCase();
  const row=normalizeMarketcheck(x,category==='FSBO');if(!row)return null;
- const seller=category==='FSBO'?'private':['franchise','independent'].includes(String(x.dealer?.type??x.mc_dealership?.type).toLowerCase())?'dealer':'unknown';
- return {...row,source:'AutoTrader',seller,state:String(x.car_location?.state??row.state).toUpperCase(),city:String(x.car_location?.city??row.city),concerns:[...row.concerns,'AutoTrader listing supplied by MarketCheck. Coverage and freshness depend on its feed.']};
+ const seller=category==='FSBO'?'private':['franchise','independent'].includes(String(record(x.dealer).type??record(x.mc_dealership).type).toLowerCase())?'dealer':'unknown';
+ return {...row,source:'AutoTrader',seller,state:String(record(x.car_location).state??row.state).toUpperCase(),city:String(record(x.car_location).city??row.city),concerns:[...row.concerns,'AutoTrader listing supplied by MarketCheck. Coverage and freshness depend on its feed.']};
 }
 
 function number(v: unknown): number | null {
@@ -54,9 +56,10 @@ function number(v: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-export function normalizeMarketcheck(x: any, privateSeller: boolean): Listing | null {
+export function normalizeMarketcheck(input:unknown, privateSeller: boolean): Listing | null {
+ const x=record(input);
   if (!x || typeof x !== 'object') return null;
-  const url = safeUrl(x.vdp_url), price = number(x.price), b = x.build ?? {};
+  const url = safeUrl(x.vdp_url), price = number(x.price), b = record(x.build);
   if (!url || price === null || price <= 0 || x.inventory_type === 'new') return null;
   const title = String(x.heading ?? [b.year, b.make, b.model, b.trim].filter(Boolean).join(' '));
   if (!title || /down payment|per month|\/mo\b|monthly payment/i.test(title)) return null;
@@ -73,11 +76,11 @@ export function normalizeMarketcheck(x: any, privateSeller: boolean): Listing | 
   return {
     id: `marketcheck:${String(x.id ?? url)}`, vin: typeof x.vin === 'string' ? x.vin : null,
     title, make: String(b.make ?? ''), model: String(b.model ?? ''), trim: String(b.trim ?? ''),
-    engineText:providerEngineText(b.engine,{cylinders:b.cylinders,configuration:b.engine_configuration,engine_block:b.engine_block,aspiration:b.engine_aspiration??b.induction}),evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?x.features.map((v:any)=>String(v?.name??v)):[])].join('\n'),exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(x.extra?.features)?x.extra.features:[])]),
+    engineText:providerEngineText(b.engine,{cylinders:b.cylinders,configuration:b.engine_configuration,engine_block:b.engine_block,aspiration:b.engine_aspiration??b.induction}),evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?array(x.features).map(v=>String(record(v).name??v)):[])].join('\n'),exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(record(x.extra).features)?record(x.extra).features as unknown[]:[])]),
     year: number(b.year), priceWarning:priceWarning(price,number(b.year)), price, miles: number(x.miles),
-    state: String(x.dealer?.state ?? x.seller?.state ?? x.state ?? '').toUpperCase(),
-    city: String(x.dealer?.city ?? x.seller?.city ?? x.city ?? ''),
-    source: new URL(url).hostname, url, photo: safeUrl(x.media?.photo_links?.[0]), photosSourceUrl:url,photos:photoUrls(x.media?.photo_links),
+    state: String(record(x.dealer).state ?? record(x.seller).state ?? x.state ?? '').toUpperCase(),
+    city: String(record(x.dealer).city ?? record(x.seller).city ?? x.city ?? ''),
+    source: new URL(url).hostname, url, photo: safeUrl(array(record(x.media).photo_links)[0]), photosSourceUrl:url,photos:photoUrls(record(x.media).photo_links),
     seller: privateSeller ? 'private' : 'dealer', drive: String(b.drivetrain ?? ''),
     titleStatus: x.carfax_clean_title === true ? 'clean' : 'unknown', condition: 'used', history: 'unknown',
     fees, checkedAt: new Date().toISOString(), sourceUpdatedAt: typeof x.last_seen_at_date === 'string' ? x.last_seen_at_date : null,

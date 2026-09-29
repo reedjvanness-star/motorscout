@@ -1,3 +1,4 @@
+import {record,array} from './unknown-data';
 import {applyLocationText} from './location-command';
 import {filterSchema,type Filters,type Message} from './domain';
 import {detailProperties} from './vehicle-requirements';
@@ -24,9 +25,9 @@ export async function interpretSearch(text:string,filters:Filters,messages:Messa
  messages:[{role:'system',content:instructions},{role:'system',content:'Current filters: '+JSON.stringify(current)},...messages.slice(-6).map(m=>({role:m.role,content:m.text})),{role:'user',content:text}],
  tools:[{type:'function',function:{name:'update_search',description:'Execute an exact used-car search or ask one necessary clarification.',strict:true,parameters:{type:'object',properties:{filters:{type:'object',properties,required:Object.keys(properties),additionalProperties:false},question:{type:'string'},action:{type:'string',enum:['search','clarify','compare','save','alert']}},required:['filters','question','action'],additionalProperties:false}}}],tool_choice:{type:'function',function:{name:'update_search'}}})});
  if(!response.ok)throw Error(`AI service unavailable (${response.status}). Your filters are unchanged; try again or use the search controls.`);
- const data:any=await response.json();const call=data.choices?.[0]?.message?.tool_calls?.[0];
- if(call?.function?.name!=='update_search')throw Error('The assistant did not provide executable search filters. Please retry.');
- const args=JSON.parse(call.function.arguments);
+ const data=record(await response.json());const message=record(record(array(data.choices)[0]).message);const call=record(array(message.tool_calls)[0]);
+ const fn=record(call.function);if(fn.name!=='update_search'||typeof fn.arguments!=='string')throw Error('The assistant did not provide executable search filters. Please retry.');
+ const args=JSON.parse(fn.arguments);
  if(!['search','clarify','compare','save','alert'].includes(args.action))throw Error('The assistant returned an invalid action. Your filters are unchanged.');
  const parsed=filterSchema.parse(applyLocationText(text,args.filters));
  const question=args.action==='clarify'?String(args.question??'').trim().slice(0,600):'';

@@ -82,7 +82,7 @@ for(const slowAuction of [true,false]){
   assert.equal(result.listings[0].source,'auto.example','confirmed retail price sorts before unconfirmed bid');
 }
 let legacyAuctionCalls=0;
-await searchInventory(initialFilters,{marketcheck:'test'}, {dealer:null,private:null,autodev:null} as any,async()=>{legacyAuctionCalls++;return Response.json({listings:[]})});
+await searchInventory(initialFilters,{marketcheck:'test'}, {dealer:null,private:null,autodev:null} as unknown as import('../lib/domain').SearchCursor,async()=>{legacyAuctionCalls++;return Response.json({listings:[]})});
 assert.equal(legacyAuctionCalls,0,'old saved cursors cannot start a new auction search with an undefined offset');
 const redirected=await searchInventory(initialFilters,{marketcheck:'test',autodev:'test'},firstCursor(),async(_input,init)=>{
   assert.equal(init?.redirect,'manual','use Workers-compatible redirect handling without forwarding keys');

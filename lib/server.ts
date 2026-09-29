@@ -4,7 +4,7 @@ import {encodeWorkspace,decodeWorkspace} from './workspace-codec';
 import {applyPriceReview} from './price-review';
 import { env } from 'cloudflare:workers';
 import { blankWorkspace,filterSchema,priceWarning,rank,type Listing, type Workspace } from './domain';
-export const config=()=>env as unknown as Record<string,any>;
+export const config=()=>env as unknown as {DB?:D1Database} & Partial<Record<'SUPPORT_EMAIL'|'CONNECTION_ENCRYPTION_KEY'|'OPENAI_API_KEY'|'OPENAI_MODEL'|'SHARED_OPENAI_OWNER_ID'|'SHARED_FREE_APIFY_OWNER_ID'|'MARKETCHECK_API_KEY'|'AUTODEV_API_KEY'|'APIFY_API_KEY'|'RESEND_API_KEY'|'ALERT_FROM_EMAIL'|'ALERT_SITE_URL'|'SCHEDULER_SECRET'|'SCHEDULER_GITHUB_REPOSITORY'|'SCHEDULER_GITHUB_REPOSITORY_ID'|'SCHEDULER_GITHUB_OWNER_ID'|'SCHEDULER_AUDIENCE'|'AUTODEV_ALERTS_APPROVED'|'MARKETCHECK_ALERTS_APPROVED',string>>;
 export const db=()=>{const d=config().DB as D1Database|undefined;if(!d)throw Error('Storage is temporarily unavailable. Please try again.');return d};
 export class SignInRequired extends Error {constructor(){super('Please sign in to save and search.');this.name='SignInRequired';}}
 export function identity(req:Request){const id=req.headers.get('oai-authenticated-user-id');if(!id)throw new SignInRequired();const origin=req.headers.get('origin');if(req.method!=='GET'&&origin&&origin!==new URL(req.url).origin)throw Error('Request origin rejected.');return id}

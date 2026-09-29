@@ -1,3 +1,4 @@
+import {record} from './unknown-data';
 import type {Listing} from './domain';
 // Preserve actual provider images; never manufacture angles or substitute stock cars.
 export function photoUrls(...values:unknown[]):string[]{
@@ -19,7 +20,7 @@ export async function fetchVehiclePhotos(vin:string,key:string,request:typeof fe
  const response=await request(`https://api.auto.dev/photos/${vin.toUpperCase()}`,{headers:{Authorization:`Bearer ${key}`,Accept:'application/json'},redirect:'manual',signal:AbortSignal.timeout(12000)});
  if(response.status===404)return [];
  if(!response.ok)throw Error(response.status===429?'The photo provider has reached its allowance. Available listing photos are still here.':'Extra photos are unavailable right now. You can still view the listing photos.');
- const data:any=await response.json();return photoUrls(data.data?.retail);
+ const data=record(await response.json());return photoUrls(record(data.data).retail);
 }
 
 // Extra photos must belong to the selected source URL, not just the same VIN.

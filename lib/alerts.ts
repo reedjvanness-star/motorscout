@@ -1,3 +1,4 @@
+import {record} from './unknown-data';
 import {config,db,filterSchema,limitUsage,schedulerReady} from './server';
 import {inventoryKeys} from './connections';
 import {searchListings} from './sources';
@@ -8,7 +9,7 @@ const DAY=86400000;
 export function emailReady(){
  const settings=config();
  if(!settings.RESEND_API_KEY||typeof settings.ALERT_FROM_EMAIL!=='string'||!settings.ALERT_FROM_EMAIL.includes('@'))return false;
- try{const url=new URL(settings.ALERT_SITE_URL);return url.protocol==='https:'&&!url.username&&!url.password}catch{return false}
+ try{const url=new URL(settings.ALERT_SITE_URL??'');return url.protocol==='https:'&&!url.username&&!url.password}catch{return false}
 }
 export async function alertSnapshot(userId:string){
  const [rows,notices]=await Promise.all([
@@ -69,7 +70,7 @@ export async function checkAlert(id:string,userId?:string){
 }
 export async function deliverAlertEmails(){
  if(!emailReady())return {sent:0};
- const origin=new URL(config().ALERT_SITE_URL).origin;
+ const origin=new URL(config().ALERT_SITE_URL??'').origin;
  if(!origin.startsWith('https://'))throw Error('An HTTPS MotorScout URL is required.');
  const rows=await db().prepare('SELECT n.id,n.cars,s.email,s.unsubscribe_token FROM notifications n JOIN alerts a ON a.id=n.alert_id JOIN alert_settings s ON s.alert_id=a.id WHERE a.enabled=1 AND s.email_enabled=1 AND s.email IS NOT NULL AND n.email_sent_at IS NULL AND n.email_attempts<3 AND n.created_at>? ORDER BY n.created_at LIMIT 10').bind(Date.now()-23*3600000).all<{id:string;cars:string;email:string;unsubscribe_token:string}>();
  let sent=0;
@@ -81,7 +82,7 @@ export async function deliverAlertEmails(){
    const unsubscribe=`${origin}/api/alerts/unsubscribe?token=${encodeURIComponent(row.unsubscribe_token)}`,cars=JSON.parse(row.cars) as Listing[];
    const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${config().RESEND_API_KEY}`,'Content-Type':'application/json','Idempotency-Key':`motorscout-${row.id}`},body:JSON.stringify({from:config().ALERT_FROM_EMAIL,to:[row.email],subject:`MotorScout found ${cars.length} new ${cars.length===1?'match':'matches'}`,text:alertEmailText(cars,origin)+`\n\nStop email alerts for this search: ${unsubscribe}`,headers:{'List-Unsubscribe':`<${unsubscribe}>`,'List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}}),signal:AbortSignal.timeout(10000)});
    if(!response.ok)continue;
-   const data:any=await response.json();if(!data.id)continue;
+   const data=record(await response.json());if(!data.id)continue;
    await db().prepare('UPDATE notifications SET email_sent_at=? WHERE id=?').bind(Date.now(),row.id).run();sent++;
   }catch{/* Keep the in-app notification. Retries stop before the 24h idempotency window expires. */}
  }

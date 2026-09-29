@@ -19,7 +19,7 @@ assert.deepEqual(knownFeatures(['no heated seats','without leather seats']),[]);
 assert(!detailsMatch({drive:'4WD',bodyType:'pickup'},f),'missing feature evidence cannot pass');
 const auto=normalizeAutoDev({vehicle:{make:'Ford',model:'F-150',exteriorColor:'Green',bodyStyle:'Pickup',fuel:'Gasoline',transmission:'Automatic'},retailListing:{price:29000,used:true,vdp:'https://example.test/truck'}})!;
 assert(matches(auto,filterSchema.parse({exteriorColor:'green',bodyType:'pickup'})));
-let body:any;
+let body!:{tools:{function:{strict:boolean}}[];parallel_tool_calls:boolean};
 const result=await interpretSearch(query,initialFilters,[],{apiKey:'test-only',request:async(_u,init)=>{body=JSON.parse(String(init?.body));return Response.json({choices:[{message:{tool_calls:[{function:{name:'update_search',arguments:JSON.stringify({filters:f,question:query,action:'search'})}}]}}]})}});
 assert.equal(result.question,'','search responses execute rather than echo an AI paraphrase');assert.equal(result.filters.exteriorColor,'green');assert.equal(body.tools[0].function.strict,true);assert.equal(body.parallel_tool_calls,false);
 const echo=await interpretSearch('find a green truck',initialFilters,[],{apiKey:'test',request:async()=>Response.json({choices:[{message:{tool_calls:[{function:{name:'update_search',arguments:JSON.stringify({filters:initialFilters,question:'find a green truck',action:'clarify'})}}]}}]})});

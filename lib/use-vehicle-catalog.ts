@@ -8,12 +8,13 @@ function useOptions(field:CatalogField,make:string,model:string,enabled:boolean)
  const [state,setState]=useState<{key:string;values:string[];status:string}>({key:'',values:[],status:''});
  useEffect(()=>{
   if(!enabled)return;
-  const previous=cache.get(key);if(previous){setState({key,values:previous.values,status:previous.fallback?'fallback':previous.complete?'live':'partial'});return;}
-  const controller=new AbortController();setState({key,values:[],status:'loading'});
+  if(cache.has(key))return;
+  const controller=new AbortController();
   const timer=setTimeout(async()=>{try{const q=new URLSearchParams({field,make,model});const r=await fetch('/api/vehicles?'+q,{signal:controller.signal});if(!r.ok)throw Error();const data=await r.json() as {values:string[];complete:boolean;fallback?:boolean};if(!Array.isArray(data.values)||data.values.some(v=>typeof v!=='string'))throw Error();if(controller.signal.aborted)return;cache.set(key,data);setState({key,values:data.values,status:data.fallback?'fallback':data.complete?'live':'partial'});}catch{if(!controller.signal.aborted)setState({key,values:[],status:'fallback'});}},450);
   return ()=>{clearTimeout(timer);controller.abort();};
  },[key,enabled,field,make,model]);
- return state.key===key?state:{key,values:[],status:''};
+ const previous=cache.get(key);
+ return previous?{key,values:previous.values,status:previous.fallback?'fallback':previous.complete?'live':'partial'}:state.key===key?state:{key,values:[],status:enabled?'loading':''};
 }
 const merge=(a:string[],b:string[])=>[...new Map([...a,...b].map(v=>[catalogNameKey(v),v])).values()].sort((a,b)=>a.localeCompare(b));
 export function useVehicleCatalog(make:string,model:string,enabled:boolean){

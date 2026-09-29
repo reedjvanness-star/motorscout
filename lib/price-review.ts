@@ -1,3 +1,4 @@
+import {record} from './unknown-data';
 import {discountRisk,DISCOUNT_PRICE_WARNING,freshPriceCheck} from './price-safety';
 import type {Listing} from './domain';
 import audited from './price-audit.json';
@@ -53,15 +54,17 @@ export function inspectListingPage(row:Listing,html:string,now=new Date().toISOS
     return result('conditional','The seller describes this advertised amount as financing or pricing after a down payment. Full cash purchase price is unconfirmed.');
   if(sameVehicle&&/\bOn Hold\b/.test(text))return result('unavailable','The seller currently marks this vehicle on hold. Confirm availability before comparing its price.');
   const candidates:number[]=[];
-  function walk(node:any,depth=0){
-    if(!node||typeof node!=='object'||depth>14)return;
-    if(Array.isArray(node)){node.forEach(n=>walk(n,depth+1));return}
+  function walk(value:unknown,depth=0){
+    const node=record(value);
+    if(!value||typeof value!=='object'||depth>14)return;
+    if(Array.isArray(value)){value.forEach(n=>walk(n,depth+1));return}
     const types=[node['@type']].flat();
     const vin=node.vehicleIdentificationNumber;
     const exactVin=typeof vin==='string'&&!!row.vin&&vin.toUpperCase()===row.vin.toUpperCase();
     const exactUrl=typeof node.url==='string'&&priceUrl(node.url)===priceUrl(row.url);
-    if(types.some(t=>['Car','Vehicle','Product'].includes(t))&&(exactVin||(!vin&&exactUrl))){
-      for(const offer of [node.offers].flat().filter(Boolean)){
+    if(types.some(t=>typeof t==='string'&&['Car','Vehicle','Product'].includes(t))&&(exactVin||(!vin&&exactUrl))){
+      for(const rawOffer of [node.offers].flat().filter(Boolean)){
+        const offer=record(rawOffer);
         if(typeof offer.url==='string'&&priceUrl(offer.url)!==priceUrl(row.url))continue;
         if(offer.priceCurrency!=='USD'||/Lease|Rental/i.test(String(offer.businessFunction??'')))continue;
         const n=money(offer.price);if(n!==null)candidates.push(n);

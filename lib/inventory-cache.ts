@@ -1,14 +1,14 @@
 import type {Filters,SearchCursor} from './domain';
 import {searchInventory,type InventoryKeys} from './inventory';
 type Result=Awaited<ReturnType<typeof searchInventory>>;
-type Database={prepare:(sql:string)=>any};
+import type {Database} from './database';
 const prefix='__inventory_cache__:';
 export async function cachedInventory(database:Database,filters:Filters,keys:InventoryKeys,cursor?:SearchCursor,search:typeof searchInventory=searchInventory,now=Date.now()):Promise<Result>{
  // Scope by credentials as well as the complete request; never persist raw API keys.
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({version:1,keys:{marketcheck:keys.marketcheck??'',autodev:keys.autodev??''},filters,cursor:cursor??null})));
  const id=prefix+Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join('');
  try{
-  const row=await database.prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(id).first();
+  const row=await database.prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(id).first<{payload:string}>();
   if(row){const entry=JSON.parse(row.payload);if(entry.expiresAt>now&&entry.createdAt<=now&&entry.expiresAt-entry.createdAt<=300000){
    const result=entry.result as Result;
    return {...result,sources:result.sources.map(source=>({...source,detail:source.detail+' Reused a recent check; listing timestamps are unchanged.'}))};

@@ -1,3 +1,4 @@
+import {record, array} from './unknown-data';
 import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
 import {knownFeatures} from './vehicle-requirements';
@@ -25,14 +26,15 @@ export function autoDevUrl(f:Filters,position='1'){
 }
 
 function nonnegative(v:unknown){if(v===null||v===undefined||v==='')return null;const n=Number(v);return Number.isFinite(n)&&n>=0?n:null}
-export function normalizeAutoDev(x:any):Listing|null{
+export function normalizeAutoDev(input:unknown):Listing|null{
+ const x=record(input);
   if(!x||typeof x!=='object')return null;
-  const v=x.vehicle??{},r=x.retailListing??{};
+  const v=record(x.vehicle),r=record(x.retailListing);
   const url=safeUrl(r.vdp),price=nonnegative(r.price);
   // Do not substitute API record URLs, financing terms, or new vehicles.
   if(!url||price===null||price<=0||r.used!==true)return null;
   const title=[v.year,v.make,v.model,v.trim].filter(Boolean).join(' ');
   if(!title||/down payment|per month|\/mo\b|monthly payment/i.test(title))return null;
   const vin=typeof v.vin==='string'?v.vin:typeof x.vin==='string'?x.vin:null;
-  return {engineText:providerEngineText(v.engine,{cylinders:v.cylinders,configuration:v.engineConfiguration}),evidenceText:[title,String(r.description??''),...(Array.isArray(v.features)?v.features.map((x:any)=>String(x?.name??x)):[])].join('\n'),exteriorColor:String(v.exteriorColor??''),bodyType:String(v.bodyStyle??''),cabStyle:String(v.bodyStyle??''),fuel:String(v.fuel??''),transmission:String(v.transmission??''),features:knownFeatures(v.features),id:`autodev:${vin??url}`,vin,title,make:String(v.make??''),model:String(v.model??''),trim:String(v.trim??''),year:nonnegative(v.year),priceWarning:priceWarning(price,nonnegative(v.year)),price,miles:nonnegative(r.miles),state:String(r.state??'').toUpperCase(),city:String(r.city??''),source:new URL(url).hostname,url,photo:safeUrl(r.primaryImage),photosSourceUrl:url,photos:photoUrls(r.primaryImage),seller:'dealer',drive:String(v.drivetrain??''),titleStatus:'unknown',condition:'used',history:'unknown',fees:null,checkedAt:new Date().toISOString(),sourceUpdatedAt:typeof x.updatedAt==='string'?x.updatedAt:null,concerns:['Auto.dev reports this dealer listing; confirm availability and full cash asking price with the seller.'],comparables:[],median:null,reason:'',total:price};
+  return {engineText:providerEngineText(v.engine,{cylinders:v.cylinders,configuration:v.engineConfiguration}),evidenceText:[title,String(r.description??''),...(Array.isArray(v.features)?array(v.features).map(x=>String(record(x).name??x)):[])].join('\n'),exteriorColor:String(v.exteriorColor??''),bodyType:String(v.bodyStyle??''),cabStyle:String(v.bodyStyle??''),fuel:String(v.fuel??''),transmission:String(v.transmission??''),features:knownFeatures(v.features),id:`autodev:${vin??url}`,vin,title,make:String(v.make??''),model:String(v.model??''),trim:String(v.trim??''),year:nonnegative(v.year),priceWarning:priceWarning(price,nonnegative(v.year)),price,miles:nonnegative(r.miles),state:String(r.state??'').toUpperCase(),city:String(r.city??''),source:new URL(url).hostname,url,photo:safeUrl(r.primaryImage),photosSourceUrl:url,photos:photoUrls(r.primaryImage),seller:'dealer',drive:String(v.drivetrain??''),titleStatus:'unknown',condition:'used',history:'unknown',fees:null,checkedAt:new Date().toISOString(),sourceUpdatedAt:typeof x.updatedAt==='string'?x.updatedAt:null,concerns:['Auto.dev reports this dealer listing; confirm availability and full cash asking price with the seller.'],comparables:[],median:null,reason:'',total:price};
 }

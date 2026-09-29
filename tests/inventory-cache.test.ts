@@ -1,11 +1,12 @@
+import {sqliteD1} from './sqlite-d1';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {cachedInventory} from '../lib/inventory-cache';
 import {initialFilters} from '../lib/domain';
 const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE workspaces(user_id TEXT PRIMARY KEY,payload TEXT,updated_at INTEGER)');
-const db={prepare(query:string){let values:any[]=[];return {bind(...args:any[]){values=args;return this},async first(){return sql.prepare(query).get(...values)},async run(){return sql.prepare(query).run(...values)}}}};
+const db=sqliteD1(sql);
 let calls=0,failed=false;
-const search:any=async()=>{calls++;return {listings:[],sources:[{name:'test',status:failed?'error':'searched',detail:failed?'HTTP 429':'Checked',count:0}],checkedAt:'2026-09-21T16:00:00Z',nextCursor:null}};
+const search:typeof import('../lib/inventory').searchInventory=async()=>{calls++;return {listings:[],sources:[{name:'test',status:failed?'error':'searched',detail:failed?'HTTP 429':'Checked',count:0}],checkedAt:'2026-09-21T16:00:00Z',nextCursor:null}};
 try{
  const first=await cachedInventory(db,initialFilters,{autodev:'secret-a'},undefined,search,1000000);
  const second=await cachedInventory(db,initialFilters,{autodev:'secret-a'},undefined,search,1000001);
@@ -23,6 +24,6 @@ try{
  await cachedInventory(broken,initialFilters,{},undefined,search,1500000);assert.equal(calls,7,'cache outage does not break live results');
  sql.prepare('INSERT INTO workspaces VALUES(?,?,?)').run('real-user','private-workspace',1);
  await cachedInventory(db,initialFilters,{},undefined,search,1600000);
- assert.equal((sql.prepare('SELECT payload FROM workspaces WHERE user_id=?').get('real-user') as any).payload,'private-workspace','cleanup cannot delete user workspaces');
+ assert.equal((sql.prepare('SELECT payload FROM workspaces WHERE user_id=?').get('real-user') as {payload:string}).payload,'private-workspace','cleanup cannot delete user workspaces');
  console.log('PASS: repeat reuse, exact filter/credential isolation, expiration, error recovery and safe cleanup');
 }finally{sql.close()}

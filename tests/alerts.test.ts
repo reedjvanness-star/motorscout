@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {DatabaseSync} from 'node:sqlite';
+import {DatabaseSync,type SQLInputValue} from 'node:sqlite';
 import {mkdtemp,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -24,9 +24,9 @@ assert.equal(alertSearchKey(filters),alertSearchKey({...filters,limit:50}));
 const sqlite=new DatabaseSync(':memory:');
 for(const name of (await readdir('drizzle')).filter(n=>n.endsWith('.sql')).sort())sqlite.exec(await readFile(join('drizzle',name),'utf8'));
 class Statement{
- values:any[]=[];
+ values:SQLInputValue[]=[];
  constructor(public sql:string){}
- bind(...values:any[]){this.values=values;return this}
+ bind(...values:SQLInputValue[]){this.values=values;return this}
  async first(){return sqlite.prepare(this.sql).get(...this.values)??null}
  async all(){return {results:sqlite.prepare(this.sql).all(...this.values)}}
  async run(){const r=sqlite.prepare(this.sql).run(...this.values);return {meta:{changes:Number(r.changes)}}}
@@ -36,11 +36,12 @@ const database={prepare:(sql:string)=>new Statement(sql),batch:async(statements:
 }};
 let calls=0,inventory=[car],failure=false;
 const fixture={env:{DB:database,AUTODEV_ALERTS_APPROVED:'true'},search:async()=>{calls++;if(failure)return {listings:[],sources:[{status:'error'}]};return {listings:inventory,sources:[{status:'searched',inspected:inventory.length}],checkedAt:new Date().toISOString()}}};
-(globalThis as any).__alertFixture=fixture;
+const fixtureGlobal=globalThis as typeof globalThis & {__alertFixture?:typeof fixture};
+fixtureGlobal.__alertFixture=fixture;
 const dir=await mkdtemp(join(tmpdir(),'motorscout-alert-test-'));
 try{
  const file=join(dir,'alerts.mjs');
- await build({entryPoints:['lib/alerts.ts'],outfile:file,bundle:true,platform:'node',format:'esm',plugins:[{name:'test-boundaries',setup(b:any){
+ await build({entryPoints:['lib/alerts.ts'],outfile:file,bundle:true,platform:'node',format:'esm',plugins:[{name:'test-boundaries',setup(b:{onResolve(options:{filter:RegExp},callback:()=>{path:string;namespace:string}):void;onLoad(options:{filter:RegExp;namespace?:string},callback:()=>{contents:string}):void}){
   b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'runtime',namespace:'fixture'}));
   b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const env=globalThis.__alertFixture.env;'}));
   b.onLoad({filter:/lib\/sources\.ts$/},()=>({contents:'export const searchListings=(...args)=>globalThis.__alertFixture.search(...args);'}));
@@ -54,7 +55,7 @@ try{
  const results=await Promise.all([api.checkAlert(id),api.checkAlert(id)]);
  assert.equal(results.filter(r=>r.checked).length,1,'concurrent schedules claim once');
  assert.equal(calls,1);
- let snapshot=await api.alertSnapshot('alice');
+ const snapshot=await api.alertSnapshot('alice');
  assert.equal(snapshot.notifications.length,1);
  assert.equal((await api.alertSnapshot('bob')).notifications.length,0,'inbox is account scoped');
  assert.equal((await api.checkAlert(id)).checked,false,'same-day runs do not spend inventory calls');
@@ -85,4 +86,4 @@ try{
  assert.equal(calls,callsBefore,'unapproved feeds never receive an alert request');
  assert.equal((await api.alertSnapshot('unapproved-feed')).schedulerReady,false);
  console.log('PASS: exact-match alerts, baseline, deduplication, concurrency, daily gating, account isolation, pause and provider recovery');
-}finally{sqlite.close();delete (globalThis as any).__alertFixture;await rm(dir,{recursive:true,force:true})}
+}finally{sqlite.close();delete fixtureGlobal.__alertFixture;await rm(dir,{recursive:true,force:true})}

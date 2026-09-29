@@ -1,3 +1,4 @@
+import {sqliteD1} from './sqlite-d1';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {resolveProviderCredential,reserveBetaSearch,type ConnectionProvider} from '../lib/shared-marketplace';
@@ -12,7 +13,7 @@ assert.equal(await resolveProviderCredential('visitor','apify',{...env,APIFY_API
 assert.equal(await resolveProviderCredential('visitor','apify',{SHARED_FREE_APIFY_OWNER_ID:'missing'},read),undefined);
 const sqlite=new DatabaseSync(':memory:');
 sqlite.exec('CREATE TABLE usage(user_id TEXT,day TEXT,count INTEGER,PRIMARY KEY(user_id,day))');
-const database={prepare:(sql:string)=>({bind:(...params:string[])=>({first:async()=>sqlite.prepare(sql).get(...params)})})};
+const database=sqliteD1(sqlite);
 for(let attempt=0;attempt<50;attempt++)await reserveBetaSearch(database,'visitor',0);
 await assert.rejects(()=>reserveBetaSearch(database,'visitor',0),/50 free beta/);
 await reserveBetaSearch(database,'other',0);await reserveBetaSearch(database,'visitor',86400000);

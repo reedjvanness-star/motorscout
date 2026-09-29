@@ -1,3 +1,4 @@
+import {record, array} from './unknown-data';
 import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
 import {coordinates} from './location';
@@ -8,11 +9,12 @@ import {knownFeatures} from './vehicle-requirements';
 export const marketplaceNames={'cargurus.com':'CarGurus','cars.com':'Cars.com','truecar.com':'TrueCar','autotrader.com':'AutoTrader','craigslist.org':'Craigslist','facebook.com':'Facebook Marketplace','carmax.com':'CarMax','carvana.com':'Carvana'} as const;
 export const FACEBOOK_ACTOR='qFR6mjgdwPouKLDvE';
 export function facebookInput(f:Filters){return {keywordSearches:marketplaceRegionBatch('facebook',f.state).regions.map(locationSlug=>({query:[f.make,f.model,f.trim,f.exteriorColor,f.bodyType,...f.requiredTerms].filter(Boolean).join(' ')||'used cars',locationSlug})),fetchDetails:true,maxListings:10,availability:'available',deduplicateListings:true,...(f.maxPrice!==null?{maxPrice:Math.max(0,f.maxPrice-f.shippingAllowance)}:{})};}
-export function normalizeFacebook(x:any):Listing|null{
+export function normalizeFacebook(input:unknown):Listing|null{
+ const x=record(input);
  if(!x||x.country_code!=='US'||x.condition!=='USED'||x.is_live!==true||x.is_sold!==false||x.is_pending!==false)return null;
  const url=safeUrl(x.url);if(!url||new URL(url).hostname.replace(/^www\./,'')!=='facebook.com')return null;
  const title=string(x.title),year=title.match(/^(19\d{2}|20\d{2})\b/)?.[1];
- const row=normalizeMarketplace({url:x.url,name:title,description:x.description,brand:x.vehicle_make_display_name,model:x.vehicle_model_display_name,vehicleModelDate:year,vehicleConfiguration:x.vehicle_trim_display_name,vehicleIdentificationNumber:x.vehicle_identification_number,offers:{price:x.price?.amount,priceCurrency:x.price?.currency},mileageFromOdometer:{value:x.vehicle_odometer_data?.value,unitCode:x.vehicle_odometer_data?.unit==='MILES'?'SMI':x.vehicle_odometer_data?.unit==='KILOMETERS'?'KMT':''},color:x.vehicle_exterior_color,image:x.images,itemLocation:{address:{addressLocality:x.location?.city,addressRegion:x.location?.state}},fuelType:string(x.vehicle_fuel_type).toLowerCase()==='petrol'?'gasoline':string(x.vehicle_fuel_type).toLowerCase(),vehicleTransmission:string(x.vehicle_transmission_type).toLowerCase(),sellerType:x.seller?.type==='dealership'?'dealer':x.seller?.type==='private'?'private':'unknown',titleStatus:string(x.vehicle_title_status).toLowerCase(),datePosted:x.creation_time?.iso,features:x.vehicle_features});
+ const row=normalizeMarketplace({url:x.url,name:title,description:x.description,brand:x.vehicle_make_display_name,model:x.vehicle_model_display_name,vehicleModelDate:year,vehicleConfiguration:x.vehicle_trim_display_name,vehicleIdentificationNumber:x.vehicle_identification_number,offers:{price:record(x.price).amount,priceCurrency:record(x.price).currency},mileageFromOdometer:{value:record(x.vehicle_odometer_data).value,unitCode:record(x.vehicle_odometer_data).unit==='MILES'?'SMI':record(x.vehicle_odometer_data).unit==='KILOMETERS'?'KMT':''},color:x.vehicle_exterior_color,image:x.images,itemLocation:{address:{addressLocality:record(x.location).city,addressRegion:record(x.location).state}},fuelType:string(x.vehicle_fuel_type).toLowerCase()==='petrol'?'gasoline':string(x.vehicle_fuel_type).toLowerCase(),vehicleTransmission:string(x.vehicle_transmission_type).toLowerCase(),sellerType:record(x.seller).type==='dealership'?'dealer':record(x.seller).type==='private'?'private':'unknown',titleStatus:string(x.vehicle_title_status).toLowerCase(),datePosted:record(x.creation_time).iso,features:x.vehicle_features});
  if(row&&x.payment_time_period)row.priceWarning='This listing reports a recurring payment. Full purchase price is unconfirmed.';
  return row;
 }
@@ -47,7 +49,8 @@ export function retailerMarketplaceSources(rows:Listing[],done:boolean,previous:
   return {name,status:done?'error':'ready',count:0,detail:detail+(old?.status==='error'?' '+old.detail.replace(/ Apify returned.*$/,''):'')};
  });
 }
-export function normalizeMarketplace(x:any):Listing|null{
+export function normalizeMarketplace(input:unknown):Listing|null{
+ const x=record(input);
  if(!x||typeof x!=='object')return null;
  const url=safeUrl(x.url);if(!url)return null;
  const hostname=new URL(url).hostname.replace(/^www\./,'');
@@ -58,25 +61,25 @@ export function normalizeMarketplace(x:any):Listing|null{
  if(host==='carmax.com'&&!/^\/car\/\d+\/?$/.test(path))return null;
  if(host==='carvana.com'&&!/^\/vehicle\/\d+\/?$/.test(path))return null;
  if(!['autotrader.com','carmax.com','carvana.com'].includes(host)&&(host==='facebook.com'?!/^\/marketplace\/item\/\d+\/?$/.test(path):host==='craigslist.org'? !(/^\/view\/d\/[^/]+\/[A-Za-z0-9_-]+\/?$/.test(path)||/^\/(?:[a-z0-9-]+\/)?(?:cto|ctd)\/d\/[^/]+\/\d+\.html$/.test(path)):!(/\/details\/\d+/.test(path)||/\/vehicledetail\//.test(path)||/\/listing\//.test(path)||/\/vehicledetails\//.test(path))))return null;
- const offer=Array.isArray(x.offers)?x.offers.length===1?x.offers[0]:null:x.offers;
+ const offer=record(Array.isArray(x.offers)?x.offers.length===1?x.offers[0]:null:x.offers);
  const price=number(offer?.price),year=number(x.vehicleModelDate);
  if(price===null||price<=0||offer?.priceCurrency!=='USD')return null;
  const condition=string(x.itemCondition||offer.itemCondition).toLowerCase();
  if(/newcondition|^new$/.test(condition))return null;
- const mileage=number(x.mileageFromOdometer?.value),unit=x.mileageFromOdometer?.unitCode;
+ const mileage=number(record(x.mileageFromOdometer).value),unit=record(x.mileageFromOdometer).unitCode;
  const miles=mileage===null?null:unit==='SMI'?mileage:unit==='KMT'?Math.ceil(mileage/1.609344):null;
- const make=string(x.brand?.name||x.brand),model=string(x.model),trim=string(x.vehicleConfiguration);
+ const make=string(record(x.brand).name||x.brand),model=string(x.model),trim=string(x.vehicleConfiguration);
  if(!make||!model)return null;
  const title=string(x.name)||[year,make,model,trim].filter(Boolean).join(' '),description=string(x.description);
  const payment=/\b(?:per month|monthly payment|down payment|amount to finance)\b|\/mo\b/i.test(title);
- const vin=/^[A-HJ-NPR-Z0-9]{17}$/i.test(string(x.vehicleIdentificationNumber))?x.vehicleIdentificationNumber.toUpperCase():null;
- const address=x.itemLocation?.address??{};
+ const vin=/^[A-HJ-NPR-Z0-9]{17}$/i.test(string(x.vehicleIdentificationNumber))?string(x.vehicleIdentificationNumber).toUpperCase():null;
+ const address=record(record(x.itemLocation).address);
  const warning=payment?'This amount may be a payment or deposit. Full purchase price is unconfirmed.':priceWarning(price,year);
  return {id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
- postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(x.itemLocation?.geo?.latitude,x.itemLocation?.geo?.longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photoUrls(x.image)[0]??null,photosSourceUrl:url,photos:photoUrls(x.image),
- exteriorColor:string(host==='craigslist.org'?x.additionalProperties?.exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType)==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
- engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...(Array.isArray(x.features)?x.features.map((v:any)=>string(v?.name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||offer?.seller?.['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
- titleStatus:['clean','rebuilt','salvage'].includes(x.titleStatus)?x.titleStatus:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
+ postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(record(record(x.itemLocation).geo).latitude,record(record(x.itemLocation).geo).longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photoUrls(x.image)[0]??null,photosSourceUrl:url,photos:photoUrls(x.image),
+ exteriorColor:string(host==='craigslist.org'?record(x.additionalProperties).exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType)==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
+ engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...(Array.isArray(x.features)?array(x.features).map(v=>string(record(v).name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||record(offer.seller)['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
+ titleStatus:['clean','rebuilt','salvage'].includes(string(x.titleStatus))?string(x.titleStatus) as Listing['titleStatus']:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
  checkedAt:new Date().toISOString(),sourceUpdatedAt:string(x.datePosted)||null,concerns:['Marketplace listing retrieved through Apify; confirm price, fitted equipment and availability with the seller.'],comparables:[],median:null,reason:'',total:price};
 }
 export class MarketplaceError extends Error {}
@@ -84,11 +87,11 @@ export async function apifyRequest(key:string,path:string,init:RequestInit={},re
  let res:Response;
  try{res=await request('https://api.apify.com/v2/'+path,{...init,headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},redirect:'manual',signal:AbortSignal.timeout(18000)});}catch(e){throw new MarketplaceError(`The server could not reach Apify (${e instanceof Error&&['TypeError','TimeoutError','AbortError'].includes(e.name)?e.name:'network error'}). No connection was saved.`);}
  if(!res.ok)throw new MarketplaceError(`Marketplace provider request failed (${res.status}). Existing results are unchanged.`);
- return res.json() as Promise<any>;
+ return res.json() as Promise<unknown>;
 }
 export async function verifyFreeAccount(key:string,request:typeof fetch=fetch){
- const {data}=await apifyRequest(key,'users/me',{},request);
- if(!data?.id||data.isPaying!==false||data.plan?.monthlyBasePriceUsd!==0)throw new MarketplaceError(`This connection requires an Apify Free account. No paid plan will be used. Verification: account ${data?.id?'present':'missing'}, paying flag ${typeof data?.isPaying==='boolean'?String(data.isPaying):'missing'}, base price ${typeof data?.plan?.monthlyBasePriceUsd==='number'?data.plan.monthlyBasePriceUsd:'missing'}.`);
+ const data=record(record(await apifyRequest(key,'users/me',{},request)).data);
+ if(!data?.id||data.isPaying!==false||record(data.plan).monthlyBasePriceUsd!==0)throw new MarketplaceError(`This connection requires an Apify Free account. No paid plan will be used. Verification: account ${data?.id?'present':'missing'}, paying flag ${typeof data?.isPaying==='boolean'?String(data.isPaying):'missing'}, base price ${typeof record(data.plan).monthlyBasePriceUsd==='number'?record(data.plan).monthlyBasePriceUsd:'missing'}.`);
  return String(data.id);
 }
 export function marketplaceSources(rows:Listing[],terminal:boolean,state='',batch=0):Source[]{

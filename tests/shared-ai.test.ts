@@ -1,3 +1,4 @@
+import {sqliteD1} from './sqlite-d1';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {budgetedAiRequest,SHARED_AI_MODEL} from '../lib/shared-ai-budget';
@@ -12,7 +13,7 @@ assert.equal(await resolveProviderCredential('guest','autodev',{SHARED_OPENAI_OW
 assert.equal(await resolveProviderCredential('guest','openai',{SHARED_OPENAI_OWNER_ID:'missing'},stored),undefined);
 const sqlite=new DatabaseSync(':memory:');
 sqlite.exec('CREATE TABLE usage(user_id TEXT,day TEXT,count INTEGER,PRIMARY KEY(user_id,day))');
-const database={prepare:(sql:string)=>({bind:(...params:any[])=>({first:async()=>sqlite.prepare(sql).get(...params)})})};
+const database=sqliteD1(sqlite);
 let calls=0,day=0;
 const request:typeof fetch=async(_url,init)=>{calls++;assert.equal(init?.redirect,'manual');assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer test-private-key');return Response.json({choices:[{message:{tool_calls:[{function:{name:'update_search',arguments:JSON.stringify({filters:{...initialFilters,make:'Audi',model:'RS7'},action:'search',question:''})}}]}}]})};
 const guarded=budgetedAiRequest(database,request,()=>day);
@@ -20,7 +21,7 @@ const run=()=>interpretSearch('Find an Audi RS7',initialFilters,[],{apiKey:key,m
 const results=await Promise.allSettled(Array.from({length:55},run));
 assert.equal(results.filter(r=>r.status==='fulfilled').length,50);
 assert.equal(calls,50);
-assert.equal((results[0] as PromiseFulfilledResult<any>).value.filters.model,'RS7');
+assert.equal((results[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof run>>>).value.filters.model,'RS7');
 await assert.rejects(run,/shared AI allowance/);
 day=86400000;await run();assert.equal(calls,51);
 await assert.rejects(()=>guarded('https://api.openai.com/v1/chat/completions',{method:'POST',body:'x'.repeat(24001)}),/too long/);
