@@ -10,6 +10,15 @@ export function listingCarfaxReportUrl(car:Pick<Listing,'vin'|'historyReportUrl'
  return findReport(car.vin,[car.historyReportUrl,car.evidenceText]);
 }
 
+export function listingCarfaxUrl(car:Pick<Listing,'vin'|'url'>){
+ const url=safeUrl(car.url);if(!url)return undefined;
+ const parsed=new URL(url);
+ if(!['carfax.com','www.carfax.com'].includes(parsed.hostname.toLowerCase()))return undefined;
+ const vin=parsed.pathname.match(/^\/vehicle\/([A-HJ-NPR-Z0-9]{17})\/?$/i)?.[1];
+ if(!vin||(car.vin&&car.vin.toUpperCase()!==vin.toUpperCase()))return undefined;
+ return url;
+}
+
 function findReport(vin:string|null,values:unknown[]):string|undefined{
  for(const value of values){
   if(typeof value!=='string')continue;

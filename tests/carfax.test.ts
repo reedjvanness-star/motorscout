@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {carfaxReportUrl,listingCarfaxReportUrl} from '../lib/carfax';
+import {carfaxReportUrl,listingCarfaxReportUrl,listingCarfaxUrl} from '../lib/carfax';
 import {deduplicate} from '../lib/domain';
 import {normalizeMarketcheck} from '../lib/marketcheck';
 
@@ -10,6 +10,12 @@ assert.equal(carfaxReportUrl(report.replace('&','&amp;')),report,'HTML-encoded q
 for(const link of ['https://www.carfax.com/vehicle-history-reports/','https://www.carfax.com/company/sample-carfax-report',`https://www.carfax.com/vehicle/${vin}`,'https://www.carfax.com/VehicleHistory/p/Report.cfx',report.replace('carfax.com','carfax.com.evil.test'),report.replace('www.carfax.com','user:secret@www.carfax.com')])assert.equal(carfaxReportUrl(link),undefined);
 assert.equal(listingCarfaxReportUrl({vin,evidenceText:report}),report,'legacy descriptions can supply the report');
 assert.equal(listingCarfaxReportUrl({vin:'3MW5U7J03L8B29889',historyReportUrl:report}),undefined,'a different explicit VIN cannot be shown as this car’s report');
+const original=`https://www.carfax.com/vehicle/${vin}`;
+assert.equal(listingCarfaxUrl({vin,url:original}),original);
+assert.equal(listingCarfaxUrl({vin:null,url:original}),original);
+assert.equal(listingCarfaxUrl({vin:'3MW5U7J03L8B29889',url:original}),undefined);
+assert.equal(listingCarfaxUrl({vin,url:original.replace('carfax.com','carfax.com.evil.test')}),undefined);
+assert.equal(listingCarfaxUrl({vin,url:'https://www.carfax.com/used-cars'}),undefined);
 const raw={id:'car',vin,vdp_url:'https://dealer.example/car',price:30000,build:{year:2020,make:'BMW',model:'5 Series'},seller_comments:report,carfax_1_owner:true};
 const old=normalizeMarketcheck(raw,false)!;
 assert.equal(old.history,'unknown','a report link or one-owner label cannot establish full history');
