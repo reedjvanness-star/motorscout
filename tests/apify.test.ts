@@ -74,3 +74,17 @@ for(const availability of [undefined,'InStock','http://schema.org/InStock','http
   assert(availableOrUnknown.concerns.some(note=>note.includes('confirm price, fitted equipment and availability')),'normalizing a listing does not claim confirmed stock');
  }
 }
+
+const carmaxRaw={...raw,url:'https://www.carmax.com/car/29124199',brand:{name:'BMW'},model:'M550',vehicleConfiguration:'I xDrive',name:'2022 BMW M550 I xDrive',fuelType:'Gas',vehicleTransmission:'Automatic',driveWheelConfiguration:'All Wheel Drive',bodyType:'4D Sedan',image:[{type:'image',fullSizeUrl:'https://img2.carmax.com/assets/29124199/hero.jpg',thumbnailUrl:'https://img2.carmax.com/assets/29124199/thumb.jpg'},{type:'image',thumbnailUrl:'https://img2.carmax.com/assets/29124199/rear.jpg'}],additionalProperties:{isSaleable:true,isAvailableToTransact:true,isSold:false,isReserved:false,isComingSoon:false,features:[{name:'Heated Front Seats',installedOption:false},{name:'Apple CarPlay',installedOption:true}]}};
+const carmax=normalizeMarketplace(carmaxRaw)!;
+assert.equal(carmax.model,'5 Series');assert.equal(carmax.trim,'M550i xDrive');assert.equal(carmax.fuel,'gasoline');assert.equal(carmax.seller,'dealer');
+assert.deepEqual(carmax.photos,['https://img2.carmax.com/assets/29124199/hero.jpg','https://img2.carmax.com/assets/29124199/rear.jpg']);assert.equal(carmax.photosSourceUrl,carmax.url);
+assert(carmax.features!.includes('heated seats'),'standard fitted features remain evidence when installedOption is false');assert(carmax.features!.includes('Apple CarPlay'));
+assert.equal(rank([carmax],[],{...initialFilters,make:'BMW',model:'5 Series',trim:'M550i',fuel:'gasoline',transmission:'automatic',drivetrain:'awd',bodyType:'sedan',features:['heated seats']}).length,1);
+for(const negative of [{isSaleable:false},{isAvailableToTransact:false},{isSold:true},{isReserved:true},{isComingSoon:true}]){
+ assert.equal(normalizeMarketplace({...carmaxRaw,offers:{...raw.offers,availability:'https://schema.org/InStock'},additionalProperties:{...carmaxRaw.additionalProperties,...negative}}),null);
+ assert.equal(normalizeMarketplace({...carmaxRaw,additionalProperties:{...carmaxRaw.additionalProperties,statusDetails:negative}}),null,'nested negative status overrides positive flattened flags');
+}
+assert(normalizeMarketplace({...carmaxRaw,additionalProperties:{}}),'missing status is unverified, not assumed unavailable');
+assert.equal(normalizeMarketplace({...carmaxRaw,vehicleConfiguration:''})!.model,'M550','do not infer the i badge when its explicit trim evidence is missing');
+assert.equal(normalizeMarketplace({...carmaxRaw,model:'550',vehicleConfiguration:'I xDrive'})!.model,'550','non-M550 does not acquire the performance variant');

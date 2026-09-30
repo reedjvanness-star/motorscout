@@ -37,7 +37,8 @@ export function marketplaceInput(f:Filters,batch=0){
 }
 // Carvana's provider builds invalid URLs when free-text specifications become path slugs.
 // Discover by make/model, then apply every original requirement locally.
-// CarMax/AutoTrader are excluded after live access failures; never retry blocked sources automatically.
+// Keep failed keyword-actor CarMax/AutoTrader paths disabled. The separately verified
+// CarMax URL actor is selected by targeted-marketplace for supported searches.
 export function retailerMarketplaceInput(f:Filters){
  return {...marketplaceInput(f),sources:['carvana'],keywords:[],craigslistRegions:[],maxResultsPerUrl:15,maxResults:15};
 }
@@ -62,6 +63,8 @@ export function normalizeMarketplace(input:unknown):Listing|null{
  if(host==='carmax.com'&&!/^\/car\/\d+\/?$/.test(path))return null;
  if(host==='carvana.com'&&!/^\/vehicle\/\d+\/?$/.test(path))return null;
  if(!['autotrader.com','carmax.com','carvana.com'].includes(host)&&(host==='facebook.com'?!/^\/marketplace\/item\/\d+\/?$/.test(path):host==='craigslist.org'? !(/^\/view\/d\/[^/]+\/[A-Za-z0-9_-]+\/?$/.test(path)||/^\/(?:[a-z0-9-]+\/)?(?:cto|ctd)\/d\/[^/]+\/\d+\.html$/.test(path)):!(/\/details\/\d+/.test(path)||/\/vehicledetail\//.test(path)||/\/listing\//.test(path)||/\/vehicledetails\//.test(path))))return null;
+ const extras=record(x.additionalProperties);
+ if(host==='carmax.com'&&[extras,record(extras.statusDetails)].some(status=>status.isSaleable===false||status.isAvailableToTransact===false||status.isSold===true||status.isReserved===true||status.isComingSoon===true))return null;
  const offer=record(Array.isArray(x.offers)?x.offers.length===1?x.offers[0]:null:x.offers);
  // Only explicit unavailable states exclude inventory; missing status proves nothing.
  if(/^(?:https?:\/\/schema\.org\/)?(?:SoldOut|OutOfStock|Discontinued)$/.test(string(offer.availability)))return null;
@@ -71,17 +74,21 @@ export function normalizeMarketplace(input:unknown):Listing|null{
  if(/newcondition|^new$/.test(condition))return null;
  const mileage=number(record(x.mileageFromOdometer).value),unit=record(x.mileageFromOdometer).unitCode;
  const miles=mileage===null?null:unit==='SMI'?mileage:unit==='KMT'?Math.ceil(mileage/1.609344):null;
- const make=string(record(x.brand).name||x.brand),model=string(x.model),trim=string(x.vehicleConfiguration);
+ const make=string(record(x.brand).name||x.brand);let model=string(x.model),trim=string(x.vehicleConfiguration);
+ // CarMax splits the explicit M550i badge across its model and trim fields.
+ if(host==='carmax.com'&&/^BMW$/i.test(make)&&/^M550$/i.test(model)&&/^i(?:\s+xDrive)?$/i.test(trim.trim())){model='5 Series';trim='M550i'+(/xDrive/i.test(trim)?' xDrive':'');}
  if(!make||!model)return null;
  const title=string(x.name)||[year,make,model,trim].filter(Boolean).join(' '),description=string(x.description);
  const payment=/\b(?:per month|monthly payment|down payment|amount to finance)\b|\/mo\b/i.test(title);
  const vin=/^[A-HJ-NPR-Z0-9]{17}$/i.test(string(x.vehicleIdentificationNumber))?string(x.vehicleIdentificationNumber).toUpperCase():null;
  const address=record(record(x.itemLocation).address);
+ const photos=photoUrls(x.image,...(host==='carmax.com'?array(x.image).filter(value=>record(value).type==='image').map(value=>record(value).fullSizeUrl??record(value).thumbnailUrl):[]));
+ const features=[...array(x.features),...(host==='carmax.com'?array(extras.features):[])];
  const warning=payment?'This amount may be a payment or deposit. Full purchase price is unconfirmed.':priceWarning(price,year);
  return canonicalListingVehicle<Listing>({id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
- postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(record(record(x.itemLocation).geo).latitude,record(record(x.itemLocation).geo).longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photoUrls(x.image)[0]??null,photosSourceUrl:url,photos:photoUrls(x.image),
- exteriorColor:string(host==='craigslist.org'?record(x.additionalProperties).exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType)==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
- engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...(Array.isArray(x.features)?array(x.features).map(v=>string(record(v).name??v)):[])].join('\n'),features:knownFeatures([...(Array.isArray(x.features)?x.features:[]),...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||record(offer.seller)['@type']==='AutoDealer'||record(x.seller)['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
+ postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(record(record(x.itemLocation).geo).latitude,record(record(x.itemLocation).geo).longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photos[0]??null,photosSourceUrl:url,photos,
+ exteriorColor:string(host==='craigslist.org'?record(x.additionalProperties).exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType).toLowerCase()==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
+ engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...features.map(v=>string(record(v).name??v))].join('\n'),features:knownFeatures([...features,...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||record(offer.seller)['@type']==='AutoDealer'||record(x.seller)['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
  titleStatus:['clean','rebuilt','salvage'].includes(string(x.titleStatus))?string(x.titleStatus) as Listing['titleStatus']:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
  checkedAt:new Date().toISOString(),sourceUpdatedAt:string(x.datePosted)||null,concerns:['Marketplace listing retrieved through Apify; confirm price, fitted equipment and availability with the seller.'],comparables:[],median:null,reason:'',total:price});
 }

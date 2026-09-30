@@ -1,3 +1,4 @@
+import {TARGETED_ACTOR,targetedMarketplaceInput,targetedMarketplaceSources} from '@/lib/targeted-marketplace';
 import {record} from '@/lib/unknown-data';
 import {locateListings} from '@/lib/zip-location';
 import {identity,db,readWorkspace,readWorkspaceSnapshot,commitMarketplaceImport,boundedJson,failure} from '@/lib/server';
@@ -10,7 +11,7 @@ import {reusableMarketplaceJob} from '@/lib/marketplace-reuse';
 import {collectWorkspace} from '@/lib/search-session';
 import type {Listing,Source} from '@/lib/domain';
 export const dynamic='force-dynamic';
-type Job={searchId:string;runId?:string;state:string;startedAt:number;batch?:number;inputKey?:string;successful?:boolean;startToken?:string;safeToRetry?:boolean;error?:string};
+type Job={searchId:string;actor?:string;targeted?:boolean;runId?:string;state:string;startedAt:number;batch?:number;inputKey?:string;successful?:boolean;startToken?:string;safeToRetry?:boolean;error?:string};
 const terminal=(state:string)=>['SUCCEEDED','FAILED','TIMED-OUT','ABORTED','IMPORTED'].includes(state);
 export async function POST(req:Request){try{
  const id=identity(req),a=await boundedJson(req),key=await providerKey(id,'apify');if(!key)throw Error('Connect your free marketplace account in Sources first.');
@@ -21,11 +22,12 @@ export async function POST(req:Request){try{
  const facebook=a.provider==='facebook',retail=a.provider==='retail';
  if(retail&&w.filters.seller==='private')return Response.json({done:true,state:'EXCLUDED_BY_FILTER'});
  if(facebook&&!marketplaceRegionBatch('facebook',w.filters.state).regions.length)return Response.json({done:true,state:'OUTSIDE_COVERAGE'});
- const actor=facebook?FACEBOOK_ACTOR:ACTOR;
+ const defaultActor=facebook?FACEBOOK_ACTOR:ACTOR;
  const jobId=id+(facebook?':facebook-job':retail?':retail-marketplace-job':':marketplace-job');
  let stored=await db().prepare('SELECT payload FROM workspaces WHERE user_id=?').bind(jobId).first<{payload:string}>();
  let job:Job|undefined=stored?JSON.parse(stored.payload):undefined;
- const hasMore=(j:Job)=>!shared&&!facebook&&!retail&&((j.batch??0)===0||marketplaceRegionBatch('automotive',w.filters.state,(j.batch??0)-1).hasMore);
+ const sourceBatch=(j:Job)=>(j.batch??0)-(j.targeted?1:0);
+ const hasMore=(j:Job)=>!shared&&!facebook&&!retail&&(sourceBatch(j)<=0||marketplaceRegionBatch('automotive',w.filters.state,sourceBatch(j)-1).hasMore);
  // Recover only a run correlated with this exact start; never guess from actor history.
  if(job&&!job.runId&&!job.safeToRetry){
   const reservation=job.startToken?await marketplaceStartReservation(db(),key,job.startToken):null;
@@ -50,7 +52,11 @@ export async function POST(req:Request){try{
   if(job?.searchId===w.searchId&&!advance&&!(job.state==='FAILED'&&!job.runId&&job.safeToRetry===true))return Response.json({done:job.state==='IMPORTED',state:job.state,hasMore:hasMore(job)});
   if(job?.runId&&!terminal(job.state)){try{await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId)+'/abort',{method:'POST'})}catch{throw Error('Previous marketplace search could not be stopped. Retry before starting another.')}}
   const next:Job={searchId:w.searchId,state:'STARTING',startToken:crypto.randomUUID(),startedAt:Date.now(),batch:advance?(job!.batch??0)+1:job?.searchId===w.searchId?(job.batch??0):0};
-  const input=facebook?facebookInput(w.filters):retail?retailerMarketplaceInput(w.filters):marketplaceInput(w.filters,next.batch);
+  const targeted=!facebook&&!retail?targetedMarketplaceInput(w.filters):null;
+  next.targeted=advance?job!.targeted:!!targeted;
+  const precise=next.targeted&&next.batch===0&&targeted;
+  const actor=precise?TARGETED_ACTOR:defaultActor;next.actor=actor;
+  const input=precise|| (facebook?facebookInput(w.filters):retail?retailerMarketplaceInput(w.filters):marketplaceInput(w.filters,Math.max(0,sourceBatch(next))));
   next.inputKey=JSON.stringify({actor,input});
   const startingPayload=JSON.stringify(next);
   const locked=await db().prepare("INSERT INTO workspaces(user_id,payload,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at WHERE workspaces.payload=? RETURNING user_id").bind(jobId,JSON.stringify(next),Date.now(),stored?.payload??'').first();
@@ -78,7 +84,7 @@ export async function POST(req:Request){try{
  if(job?.searchId===w.searchId&&job.state==='IMPORTED')return Response.json({done:true,state:'IMPORTED',hasMore:hasMore(job)});
  if(!job||job.searchId!==w.searchId||!job.runId)return Response.json({done:job?.state==='FAILED',state:job?.state??'NOT_STARTED'});
  const data=record(record(await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId))).data);
- if(data.actId!==actor||typeof data.status!=='string')throw Error('Unexpected marketplace job.');
+ if(data.actId!==(job.actor??defaultActor)||typeof data.status!=='string')throw Error('Unexpected marketplace job.');
  const done=terminal(data.status);
  const raw=data.defaultDatasetId?await apifyRequest(key,`datasets/${encodeURIComponent(String(data.defaultDatasetId))}/items?format=json&clean=true&limit=100`):[];
  if(!Array.isArray(raw))throw Error('Invalid marketplace inventory response.');
@@ -95,7 +101,7 @@ export async function POST(req:Request){try{
   return Response.json({done:currentJob.state==='IMPORTED',state:currentJob.state,hasMore:hasMore(currentJob)});
  }
  collectWorkspace(latest,rows);
- const sources:Source[]=retail?retailerMarketplaceSources(rows,done,latest.sources):facebook?[{name:'Facebook Marketplace',status:rows.length?'searched':done?'error':'ready',count:rows.length,inspected:rows.length,detail:`Local search centers: ${marketplaceRegionBatch('facebook',latest.filters.state).regions.join(', ')}. Partial coverage only. ${rows.length} usable vehicles returned. Your exact filters are applied before display.`}]:marketplaceSources(rows,done,latest.filters.state,job.batch??0);if(w.filters.zip)for(const source of sources)source.detail+=` Only vehicles with verifiable locations within ${w.filters.radiusMiles} miles of ${w.filters.zip} appear. Listings without location evidence are excluded.`;latest.sources=[...latest.sources.filter(s=>!sources.some(n=>n.name===s.name)),...sources];
+ const sources:Source[]=job.actor===TARGETED_ACTOR?targetedMarketplaceSources(rows,done):retail?retailerMarketplaceSources(rows,done,latest.sources):facebook?[{name:'Facebook Marketplace',status:rows.length?'searched':done?'error':'ready',count:rows.length,inspected:rows.length,detail:`Local search centers: ${marketplaceRegionBatch('facebook',latest.filters.state).regions.join(', ')}. Partial coverage only. ${rows.length} usable vehicles returned. Your exact filters are applied before display.`}]:marketplaceSources(rows,done,latest.filters.state,Math.max(0,sourceBatch(job)));if(w.filters.zip)for(const source of sources)source.detail+=` Only vehicles with verifiable locations within ${w.filters.radiusMiles} miles of ${w.filters.zip} appear. Listings without location evidence are excluded.`;latest.sources=[...latest.sources.filter(s=>!sources.some(n=>n.name===s.name)),...sources];
  if(done){const n=latest.listings.length;latest.messages.push({role:'assistant',at:Date.now(),text:`Marketplace search finished. ${n} cars match your current requirements.${n<5?' Fewer than five exact matches were found in the inventory checked; your specifications have not been relaxed.':''}`,ids:latest.listings.slice(0,12).map(r=>r.id)});}
  const nextJob={...job,state:done?'IMPORTED':data.status,successful:data.status==='SUCCEEDED'};
  if(await commitMarketplaceImport(id,latest,snapshot.payload,jobId,current.payload,nextJob))return Response.json({done,state:data.status,count:rows.length,hasMore:done&&hasMore(nextJob)});
