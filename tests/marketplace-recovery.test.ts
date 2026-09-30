@@ -141,14 +141,18 @@ try{
  await call('poll',400);assert.equal((await api.readWorkspace('visitor')).listings.length,0);
  await seed('FAILED',null,'current-search',true);beforeStart=replaceJob;await call('start');
  assert.deepEqual(JSON.parse((sql.prepare('SELECT payload FROM workspaces WHERE user_id=?').get('visitor:marketplace-job') as {payload:string}).payload),replacement,'late start only updates its exact STARTING claim');
- // Targeted CarMax actor is selected only for the verified BMW trim.
+ // New BMW searches avoid the paused CarMax service and use ordinary marketplaces.
  await seed('FAILED',null,'current-search',true);
  let selected=await api.readWorkspace('visitor');selected.filters=filterSchema.parse({make:'BMW',model:'5 Series',trim:'M550i'});await api.writeWorkspace('visitor',selected);
- await call('start');assert.equal(fixture.startActor,'HqZudyEggO98WZvlN');assert.deepEqual(fixture.startInput,{searchUrls:[{url:'https://www.carmax.com/cars/bmw/m550'}],maxResultsPerUrl:10,maxResults:10});assert.equal(fixture.startCap,.04);
- fixture.status='SUCCEEDED';await call('poll',400);assert.equal((await api.readWorkspace('visitor')).listings.length,0,'wrong actor must not import results');
- fixture.actor='HqZudyEggO98WZvlN';await call('poll');const startsAfterTarget=fixture.starts;
- assert.equal((await call('start')).done,true);assert.equal(fixture.starts,startsAfterTarget,'shared beta keeps the one-batch cap');
- // Owner expansion moves from targeted batch0 to keyword batch0 then region batch1.
+ await call('start');assert.equal(fixture.startActor,'fixture-actor');assert.deepEqual(fixture.startInput,{query:'same-input'});assert.equal(fixture.startCap,.04);
+ fixture.actor='HqZudyEggO98WZvlN';fixture.status='SUCCEEDED';await call('poll',400);assert.equal((await api.readWorkspace('visitor')).listings.length,0,'wrong actor must not import results');
+ fixture.actor='fixture-actor';await call('poll');const startsAfterOrdinary=fixture.starts;
+ assert.equal((await call('start')).done,true);assert.equal(fixture.starts,startsAfterOrdinary,'shared beta keeps the one-batch cap');
+ // Old targeted jobs remain importable and preserve their owner expansion sequence.
+ await seed('RUNNING');
+ const legacyTarget={searchId:'current-search',runId:'existing-run',state:'RUNNING',startedAt:Date.now(),actor:'HqZudyEggO98WZvlN',targeted:true,batch:0};
+ sql.prepare('UPDATE workspaces SET payload=? WHERE user_id=?').run(JSON.stringify(legacyTarget),'visitor:marketplace-job');
+ fixture.actor='HqZudyEggO98WZvlN';fixture.status='SUCCEEDED';await call('poll');assert.equal((await api.readWorkspace('visitor')).listings.length,1);
  fixture.shared=false;await call('start');assert.equal(fixture.startActor,'fixture-actor');assert.deepEqual(fixture.startInput,{query:'same-input'});
  fixture.actor='fixture-actor';await call('poll');await call('start');assert.deepEqual(fixture.startInput,{query:'same-input',batch:1});
  const expanded=JSON.parse((sql.prepare('SELECT payload FROM workspaces WHERE user_id=?').get('visitor:marketplace-job') as {payload:string}).payload);assert.equal(expanded.batch,2);assert.equal(expanded.targeted,true);

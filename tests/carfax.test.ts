@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {carfaxReportUrl,listingCarfaxReportUrl} from '../lib/carfax';
+import {deduplicate} from '../lib/domain';
+import {normalizeMarketcheck} from '../lib/marketcheck';
+
+const vin='WBA5U7C08LFH34451';
+const report=`https://www.carfax.com/VehicleHistory/p/Report.cfx?partner=dealer&vin=${vin}`;
+assert.equal(carfaxReportUrl(`View report: ${report}.`),report);
+assert.equal(carfaxReportUrl(report.replace('&','&amp;')),report,'HTML-encoded query separators are decoded');
+for(const link of ['https://www.carfax.com/vehicle-history-reports/','https://www.carfax.com/company/sample-carfax-report',`https://www.carfax.com/vehicle/${vin}`,'https://www.carfax.com/VehicleHistory/p/Report.cfx',report.replace('carfax.com','carfax.com.evil.test'),report.replace('www.carfax.com','user:secret@www.carfax.com')])assert.equal(carfaxReportUrl(link),undefined);
+assert.equal(listingCarfaxReportUrl({vin,evidenceText:report}),report,'legacy descriptions can supply the report');
+assert.equal(listingCarfaxReportUrl({vin:'3MW5U7J03L8B29889',historyReportUrl:report}),undefined,'a different explicit VIN cannot be shown as this car’s report');
+const raw={id:'car',vin,vdp_url:'https://dealer.example/car',price:30000,build:{year:2020,make:'BMW',model:'5 Series'},seller_comments:report,carfax_1_owner:true};
+const old=normalizeMarketcheck(raw,false)!;
+assert.equal(old.history,'unknown','a report link or one-owner label cannot establish full history');
+assert.equal(old.historyClaims?.length,1);
+assert.equal(old.historyReportUrl,report);
+old.checkedAt='2026-09-29T01:00:00Z';
+const fresh={...normalizeMarketcheck({...raw,seller_comments:'',carfax_1_owner:false},false)!,checkedAt:'2026-09-30T01:00:00Z'};
+const [merged]=deduplicate([old,fresh]);
+assert.deepEqual(merged.historyClaims,[],'a refreshed listing clears an older claim');
+assert.equal(merged.historyReportUrl,undefined,'a removed report link cannot reappear from stale rows');
+console.log('PASS: CARFAX report links, HTML queries, legacy descriptions, VIN checks, history claims and refresh removal');

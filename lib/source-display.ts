@@ -2,6 +2,7 @@ import {marketplaceRegions} from './marketplace-regions';
 import type {Source} from './domain';
 const marketplaceNames=['Cars.com','CarGurus','TrueCar','Facebook Marketplace','Craigslist','Carvana'];
 export function sourceDisplay(source:Source,marketplacesConnected:boolean,state:string){
+ if(source.name==='CarMax'&&source.status==='error'&&source.detail.startsWith('The targeted CarMax search'))return {label:'Temporarily unavailable',detail:'The direct CarMax provider reported blocked requests and an exhausted fetch allowance. New searches use other connected marketplaces. CarMax listings may also arrive through the separate MarketCheck retailer feed when that feed is available.'};
  if(source.status==='unavailable'&&source.detail.startsWith('Excluded by your '))return {label:'Excluded by your filters',detail:source.detail};
  const regional=source.name==='Facebook Marketplace';
  if(marketplacesConnected&&marketplaceNames.includes(source.name)&&source.status==='unavailable'){

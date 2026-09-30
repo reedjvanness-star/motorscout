@@ -11,3 +11,6 @@ assert.equal(sourceDisplay({...unused,name:'MarketCheck · auctions',detail:'Exc
 console.log('PASS: connected marketplaces, missing credentials, regional coverage and provider limits');
 
 for(const name of ['CarMax','AutoTrader'])assert.equal(sourceDisplay({...unused,name},true,'').label,'Not connected');
+const paused=sourceDisplay({name:'CarMax',status:'error',detail:'The targeted CarMax search returned no usable listings.'},true,'');
+assert.equal(paused.label,'Temporarily unavailable');
+assert.match(paused.detail,/New searches use other connected marketplaces/);

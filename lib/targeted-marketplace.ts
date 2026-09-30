@@ -3,6 +3,10 @@ import type {Filters,Listing,Source} from './domain';
 // Verified against a capped live run on 2026-09-29. The keyword actor ignores
 // this trim; CarMax's own model URL selects it before the paid result limit.
 export const TARGETED_ACTOR='HqZudyEggO98WZvlN';
+// The live API run returned zero rows with 403 / budget_exhausted in its log.
+// Keep existing jobs importable, but use the ordinary sources for new searches
+// until the provider's fetch service has been verified working again.
+export const TARGETED_CARMAX_AVAILABLE=false;
 export function targetedMarketplaceInput(f:Filters){
  if(f.seller==='private'||f.make!=='BMW'||f.model!=='5 Series'||!/^M550i(?:\s+xDrive)?$/i.test(f.trim))return null;
  return {searchUrls:[{url:'https://www.carmax.com/cars/bmw/m550'}],maxResultsPerUrl:10,maxResults:10};

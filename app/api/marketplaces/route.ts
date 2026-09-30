@@ -1,4 +1,4 @@
-import {TARGETED_ACTOR,targetedMarketplaceInput,targetedMarketplaceSources} from '@/lib/targeted-marketplace';
+import {TARGETED_ACTOR,TARGETED_CARMAX_AVAILABLE,targetedMarketplaceInput,targetedMarketplaceSources} from '@/lib/targeted-marketplace';
 import {record} from '@/lib/unknown-data';
 import {locateListings} from '@/lib/zip-location';
 import {identity,db,readWorkspace,readWorkspaceSnapshot,commitMarketplaceImport,boundedJson,failure} from '@/lib/server';
@@ -52,7 +52,7 @@ export async function POST(req:Request){try{
   if(job?.searchId===w.searchId&&!advance&&!(job.state==='FAILED'&&!job.runId&&job.safeToRetry===true))return Response.json({done:job.state==='IMPORTED',state:job.state,hasMore:hasMore(job)});
   if(job?.runId&&!terminal(job.state)){try{await apifyRequest(key,'actor-runs/'+encodeURIComponent(job.runId)+'/abort',{method:'POST'})}catch{throw Error('Previous marketplace search could not be stopped. Retry before starting another.')}}
   const next:Job={searchId:w.searchId,state:'STARTING',startToken:crypto.randomUUID(),startedAt:Date.now(),batch:advance?(job!.batch??0)+1:job?.searchId===w.searchId?(job.batch??0):0};
-  const targeted=!facebook&&!retail?targetedMarketplaceInput(w.filters):null;
+  const targeted=TARGETED_CARMAX_AVAILABLE&&!facebook&&!retail?targetedMarketplaceInput(w.filters):null;
   next.targeted=advance?job!.targeted:!!targeted;
   const precise=next.targeted&&next.batch===0&&targeted;
   const actor=precise?TARGETED_ACTOR:defaultActor;next.actor=actor;

@@ -46,7 +46,7 @@ export function deduplicate(rows:Listing[]){
     for(const row of group)for(const offer of [...(row.offers??[]).filter(offer=>offer.url!==row.url),{source:row.source,url:row.url,price:row.price,fees:row.fees,checkedAt:row.checkedAt,priceWarning:row.priceWarning}]){
       const old=offers.get(offer.url);if(!old||checked(offer)>=checked(old))offers.set(offer.url,offer);
     }
-    return {...ordered[0],historyReportUrl:ordered.find(row=>row.historyReportUrl)?.historyReportUrl,historyClaims:[...new Set(group.flatMap(row=>row.historyClaims??[]))],photos:photoUrls(...group.filter(row=>row.url===ordered[0].url&&row.photosSourceUrl===row.url).flatMap(row=>[row.photo,row.photos])),photosSourceUrl:ordered[0].url,offers:[...offers.values()]};
+    return {...ordered[0],photos:photoUrls(...group.filter(row=>row.url===ordered[0].url&&row.photosSourceUrl===row.url).flatMap(row=>[row.photo,row.photos])),photosSourceUrl:ordered[0].url,offers:[...offers.values()]};
   });
 }
 const eq=(a:string,b:string)=>vehicleNameKey(a)===vehicleNameKey(b);
