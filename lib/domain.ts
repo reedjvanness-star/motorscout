@@ -8,7 +8,7 @@ export const filterSchema=z.object({...detailFilterShape,make:z.string().max(40)
 export type Filters=z.infer<typeof filterSchema>;
 export const initialFilters:Filters=filterSchema.parse({});
 export type ListingOffer={priceWarning?:string|null;source:string;url:string;price:number;fees:number|null;checkedAt:string};
-export type Listing=VehicleDetails&ListingLocation&{priceReview?:PriceReview;priceWarning?:string|null;offers?:ListingOffer[];photos?:string[];photosSourceUrl?:string;id:string;vin:string|null;title:string;make:string;model:string;trim:string;year:number|null;price:number;miles:number|null;state:string;city:string;source:string;url:string;photo:string|null;seller:'private'|'dealer'|'unknown';drive:string;titleStatus:string;condition:string;history:string;fees:number|null;checkedAt:string;sourceUpdatedAt:string|null;concerns:string[];comparables:{id:string;title:string;price:number;miles:number|null;url:string}[];median:number|null;reason:string;total:number};
+export type Listing=VehicleDetails&ListingLocation&{priceReview?:PriceReview;priceWarning?:string|null;historyReportUrl?:string;historyClaims?:string[];offers?:ListingOffer[];photos?:string[];photosSourceUrl?:string;id:string;vin:string|null;title:string;make:string;model:string;trim:string;year:number|null;price:number;miles:number|null;state:string;city:string;source:string;url:string;photo:string|null;seller:'private'|'dealer'|'unknown';drive:string;titleStatus:string;condition:string;history:string;fees:number|null;checkedAt:string;sourceUpdatedAt:string|null;concerns:string[];comparables:{id:string;title:string;price:number;miles:number|null;url:string}[];median:number|null;reason:string;total:number};
 export type Source={name:string;status:'ready'|'unavailable'|'searched'|'error';detail:string;count?:number;total?:number;inspected?:number;hasMore?:boolean};
 export type Message={role:'user'|'assistant';text:string;ids?:string[];target?:'compare';at:number};
 export function availableComparisonIds(rows:Listing[],ids:string[]){const available=new Set(rows.map(r=>r.id));return [...new Set(ids)].filter(id=>available.has(id));}
@@ -46,7 +46,7 @@ export function deduplicate(rows:Listing[]){
     for(const row of group)for(const offer of [...(row.offers??[]).filter(offer=>offer.url!==row.url),{source:row.source,url:row.url,price:row.price,fees:row.fees,checkedAt:row.checkedAt,priceWarning:row.priceWarning}]){
       const old=offers.get(offer.url);if(!old||checked(offer)>=checked(old))offers.set(offer.url,offer);
     }
-    return {...ordered[0],photos:photoUrls(...group.filter(row=>row.url===ordered[0].url&&row.photosSourceUrl===row.url).flatMap(row=>[row.photo,row.photos])),photosSourceUrl:ordered[0].url,offers:[...offers.values()]};
+    return {...ordered[0],historyReportUrl:ordered.find(row=>row.historyReportUrl)?.historyReportUrl,historyClaims:[...new Set(group.flatMap(row=>row.historyClaims??[]))],photos:photoUrls(...group.filter(row=>row.url===ordered[0].url&&row.photosSourceUrl===row.url).flatMap(row=>[row.photo,row.photos])),photosSourceUrl:ordered[0].url,offers:[...offers.values()]};
   });
 }
 const eq=(a:string,b:string)=>vehicleNameKey(a)===vehicleNameKey(b);

@@ -4,6 +4,7 @@ import {providerEngineText} from './engine-specs';
 import {photoUrls} from './vehicle-photos';
 import {knownFeatures} from './vehicle-requirements';
 import {safeUrl, priceWarning, type Filters, type Listing} from './domain';
+import {carfaxReportUrl} from './carfax';
 
 export const MARKETCHECK_PAGE_SIZE = 50;
 export function marketcheckUrl(f: Filters, privateSeller: boolean, offset = 0, auction = false) {
@@ -77,7 +78,7 @@ export function normalizeMarketcheck(input:unknown, privateSeller: boolean): Lis
   return canonicalListingVehicle<Listing>({
     id: `marketcheck:${String(x.id ?? url)}`, vin: typeof x.vin === 'string' ? x.vin : null,
     title, make: String(b.make ?? ''), model: String(b.model ?? ''), trim: String(b.trim ?? ''),
-    engineText:providerEngineText(b.engine,{cylinders:b.cylinders,configuration:b.engine_configuration,engine_block:b.engine_block,aspiration:b.engine_aspiration??b.induction}),evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?array(x.features).map(v=>String(record(v).name??v)):[])].join('\n'),exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(record(x.extra).features)?record(x.extra).features as unknown[]:[])]),
+    engineText:providerEngineText(b.engine,{cylinders:b.cylinders,configuration:b.engine_configuration,engine_block:b.engine_block,aspiration:b.engine_aspiration??b.induction}),evidenceText:[title,String(x.seller_comments??x.description??''),...(Array.isArray(x.features)?array(x.features).map(v=>String(record(v).name??v)):[])].join('\n'),historyReportUrl:carfaxReportUrl(x.carfax_report_url,x.carfax_url,x.carfax_report,x.seller_comments,x.description),historyClaims:x.carfax_1_owner===true?['CARFAX 1-owner status is reported by the listing provider. Confirm it on the seller’s listing and review the report.']:[],exteriorColor:String(x.exterior_color??x.base_ext_color??''),baseExteriorColor:String(x.base_ext_color??''),bodyType:String(b.body_type??''),cabStyle:String(b.body_subtype??x.body_subtype??''),fuel:String(b.fuel_type??''),transmission:String(b.transmission??''),features:knownFeatures([...(Array.isArray(x.high_value_features)?x.high_value_features:[]),...(Array.isArray(record(x.extra).features)?record(x.extra).features as unknown[]:[])]),
     year: number(b.year), priceWarning:priceWarning(price,number(b.year)), price, miles: number(x.miles),
     state: String(record(x.dealer).state ?? record(x.seller).state ?? x.state ?? '').toUpperCase(),
     city: String(record(x.dealer).city ?? record(x.seller).city ?? x.city ?? ''),

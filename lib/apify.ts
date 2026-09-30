@@ -6,6 +6,7 @@ import {coordinates} from './location';
 import {safeUrl,priceWarning,type Listing,type Filters,type Source} from './domain';
 import {craigslistHost,marketplaceRegionBatch} from './marketplace-regions';
 import {knownFeatures} from './vehicle-requirements';
+import {carfaxReportUrl} from './carfax';
 
 export const marketplaceNames={'cargurus.com':'CarGurus','cars.com':'Cars.com','truecar.com':'TrueCar','autotrader.com':'AutoTrader','craigslist.org':'Craigslist','facebook.com':'Facebook Marketplace','carmax.com':'CarMax','carvana.com':'Carvana'} as const;
 export const FACEBOOK_ACTOR='qFR6mjgdwPouKLDvE';
@@ -88,7 +89,7 @@ export function normalizeMarketplace(input:unknown):Listing|null{
  return canonicalListingVehicle<Listing>({id:'marketplace:'+url,vin,url,source:marketplaceNames[host as keyof typeof marketplaceNames],title,make,model,trim,year,price,miles,
  postalCode:string(address.postalCode).slice(0,5),coordinates:coordinates(record(record(x.itemLocation).geo).latitude,record(record(x.itemLocation).geo).longitude),state:string(address.addressRegion).toUpperCase(),city:string(address.addressLocality),photo:photos[0]??null,photosSourceUrl:url,photos,
  exteriorColor:string(host==='craigslist.org'?record(x.additionalProperties).exteriorColor||x.color:x.color),bodyType:string(x.bodyType),cabStyle:string(x.bodyType),fuel:string(x.fuelType).toLowerCase()==='gas'?'gasoline':string(x.fuelType),transmission:string(x.vehicleTransmission),drive:string(x.driveWheelConfiguration).replace(/^https?:\/\/schema.org\//,''),
- engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...features.map(v=>string(record(v).name??v))].join('\n'),features:knownFeatures([...features,...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||record(offer.seller)['@type']==='AutoDealer'||record(x.seller)['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
+ engineText:providerEngineText(x.vehicleEngine,x.engine,{cylinders:x.numberOfCylinders}),evidenceText:[title,description,...features.map(v=>string(record(v).name??v))].join('\n'),historyReportUrl:carfaxReportUrl(x.carfax_report_url,x.carfaxReportUrl,description),features:knownFeatures([...features,...description.split(/[.;\n]/)]),seller:(['carmax.com','carvana.com'].includes(host)||x.sellerType==='dealer'||record(offer.seller)['@type']==='AutoDealer'||record(x.seller)['@type']==='AutoDealer')?'dealer':x.sellerType==='owner'||x.sellerType==='private'?'private':'unknown',
  titleStatus:['clean','rebuilt','salvage'].includes(string(x.titleStatus))?string(x.titleStatus) as Listing['titleStatus']:'unknown',condition:'used',history:'unknown',fees:null,priceWarning:warning,
  checkedAt:new Date().toISOString(),sourceUpdatedAt:string(x.datePosted)||null,concerns:['Marketplace listing retrieved through Apify; confirm price, fitted equipment and availability with the seller.'],comparables:[],median:null,reason:'',total:price});
 }
